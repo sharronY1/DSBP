@@ -1,6 +1,6 @@
-# Kanban Web App
+# DSBP
 
-A full-stack Kanban web application with a FastAPI backend and a JavaScript frontend. The app supports user registration, login, project and task management, threaded comments with @mentions, and per-user notifications. Data is stored in an SQL (SQLite) database.
+A full-stack web application with a FastAPI backend and a JavaScript frontend. The app supports user registration, login, project and task management, threaded comments with @mentions, and per-user notifications. Data is stored in an SQL (SQLite) database.
 ## Features
 
 - User registration and JWT-based login
@@ -29,4 +29,5 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The frontend is served automatically from the `frontend/` directory by FastAPI's static files support.
+
 
