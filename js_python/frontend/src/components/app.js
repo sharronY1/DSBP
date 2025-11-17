@@ -2895,10 +2895,23 @@ function renderDependencyView() {
       dependencyMapData.chains.forEach((chain) => {
         const card = document.createElement("div");
         card.className = "dependency-card";
-        card.textContent = chain.tasks
-          .map((task) => buildDependencyTaskLabel(task))
-          .join(" → ");
+        card.innerHTML = chain.tasks
+          .map((task) => renderTaskNode(task))
+          .join('<span class="dependency-arrow-inline"> → </span>');
         dependencyChainsContainer.appendChild(card);
+        
+        // Add click events to task nodes
+        card.querySelectorAll('.task-node').forEach((node) => {
+          const taskId = parseInt(node.dataset.taskId, 10);
+          const task = chain.tasks.find(t => t.id === taskId);
+          if (task) {
+            node.style.cursor = 'pointer';
+            node.addEventListener('click', (e) => {
+              e.stopPropagation();
+              showTaskDetailPopup(task, e);
+            });
+          }
+        });
       });
     }
   }
@@ -2911,9 +2924,25 @@ function renderDependencyView() {
       dependencyMapData.convergences.forEach((group) => {
         const card = document.createElement("div");
         card.className = "dependency-card";
-        const sources = group.sources.map((task) => buildDependencyTaskLabel(task)).join(", ");
-        card.textContent = `${sources} → ${buildDependencyTaskLabel(group.target)}`;
+        const sources = group.sources.map((task) => renderTaskNode(task)).join('<span class="dependency-separator">, </span>');
+        card.innerHTML = `${sources}<span class="dependency-arrow-inline"> → </span>${renderTaskNode(group.target)}`;
         dependencyConvergenceContainer.appendChild(card);
+        
+        // Add click events to task nodes
+        card.querySelectorAll('.task-node').forEach((node) => {
+          const taskId = parseInt(node.dataset.taskId, 10);
+          let task = group.sources.find(t => t.id === taskId);
+          if (!task && group.target.id === taskId) {
+            task = group.target;
+          }
+          if (task) {
+            node.style.cursor = 'pointer';
+            node.addEventListener('click', (e) => {
+              e.stopPropagation();
+              showTaskDetailPopup(task, e);
+            });
+          }
+        });
       });
     }
   }
@@ -2927,13 +2956,25 @@ function renderDependencyView() {
         const row = document.createElement("div");
         row.className = "dependency-edge-row";
         row.innerHTML = `
-          <span>${escapeHtml(buildDependencyTaskLabel(edge.depends_on))} → ${escapeHtml(
-          buildDependencyTaskLabel(edge.dependent)
-        )}</span>
+          <span class="dependency-edge-content">${renderTaskNode(edge.depends_on)}<span class="dependency-arrow-inline"> → </span>${renderTaskNode(edge.dependent)}</span>
           <button class="btn-secondary btn-small" data-dependency-id="${edge.id}">Remove</button>
         `;
         const btn = row.querySelector("button");
         btn.addEventListener("click", () => deleteDependencyLink(edge.id));
+        
+        // Add click events to task nodes
+        row.querySelectorAll('.task-node').forEach((node) => {
+          const taskId = parseInt(node.dataset.taskId, 10);
+          const task = edge.depends_on.id === taskId ? edge.depends_on : edge.dependent;
+          if (task) {
+            node.style.cursor = 'pointer';
+            node.addEventListener('click', (e) => {
+              e.stopPropagation();
+              showTaskDetailPopup(task, e);
+            });
+          }
+        });
+        
         dependencyEdgesContainer.appendChild(row);
       });
     }
@@ -2943,6 +2984,85 @@ function renderDependencyView() {
   renderVisGraph(dependencyMapData);
 }
 
+// Color palette for projects
+const PROJECT_COLORS = [
+  { background: '#e0f2fe', border: '#0284c7', text: '#0c4a6e' }, // Blue
+  { background: '#fef3c7', border: '#f59e0b', text: '#78350f' }, // Amber
+  { background: '#d1fae5', border: '#10b981', text: '#064e3b' }, // Green
+  { background: '#fce7f3', border: '#ec4899', text: '#831843' }, // Pink
+  { background: '#e9d5ff', border: '#a855f7', text: '#581c87' }, // Purple
+  { background: '#fed7aa', border: '#f97316', text: '#7c2d12' }, // Orange
+  { background: '#cffafe', border: '#06b6d4', text: '#164e63' }, // Cyan
+  { background: '#fde68a', border: '#eab308', text: '#713f12' }, // Yellow
+  { background: '#ddd6fe', border: '#8b5cf6', text: '#4c1d95' }, // Violet
+  { background: '#fecdd3', border: '#f43f5e', text: '#881337' }, // Rose
+];
+
+// Function to get color for a project
+function getProjectColor(projectId) {
+  const index = projectId % PROJECT_COLORS.length;
+  return PROJECT_COLORS[index];
+}
+
+// Function to render a task node with project color
+function renderTaskNode(task) {
+  const projectColor = getProjectColor(task.project_id);
+  return `
+    <span class="task-node" 
+          style="background-color: ${projectColor.background}; border-color: ${projectColor.border}; color: ${projectColor.text};"
+          data-task-id="${task.id}"
+          data-task-project-id="${task.project_id}">
+      ${escapeHtml(task.title)}
+    </span>
+  `;
+}
+
+// Function to render project legend
+function renderProjectLegend(data) {
+  const legendContainer = document.getElementById("dependency-legend");
+  if (!legendContainer) return;
+
+  if (!data || !data.tasks || data.tasks.length === 0) {
+    legendContainer.innerHTML = "";
+    return;
+  }
+
+  // Get unique projects
+  const projectMap = new Map();
+  data.tasks.forEach(task => {
+    if (!projectMap.has(task.project_id)) {
+      projectMap.set(task.project_id, {
+        id: task.project_id,
+        name: task.project_name,
+        color: getProjectColor(task.project_id)
+      });
+    }
+  });
+
+  const projects = Array.from(projectMap.values()).sort((a, b) => 
+    a.name.localeCompare(b.name)
+  );
+
+  if (projects.length === 0) {
+    legendContainer.innerHTML = "";
+    return;
+  }
+
+  const legendHtml = `
+    <div class="dependency-legend-title">Project Legend</div>
+    <div class="dependency-legend-items">
+      ${projects.map(project => `
+        <div class="dependency-legend-item">
+          <span class="dependency-legend-color" style="background-color: ${project.color.background}; border-color: ${project.color.border};"></span>
+          <span class="dependency-legend-label">${escapeHtml(project.name)}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  legendContainer.innerHTML = legendHtml;
+}
+
 // ADDED: New function to render the vis.js graph
 function renderVisGraph(data) {
   const container = document.getElementById("vis-graph-container");
@@ -2950,16 +3070,35 @@ function renderVisGraph(data) {
 
   if (!data || !data.tasks || data.tasks.length === 0) {
     container.innerHTML = "<p style='padding: 20px; text-align: center; color: #94a3b8;'>No tasks to display in graph.</p>";
+    renderProjectLegend(data);
     return;
   }
 
-  // 1. Create nodes
+  // 1. Create nodes with project-based colors
   const nodes = new vis.DataSet(
-    data.tasks.map(task => ({
-      id: task.id,
-      label: `${task.title}\n(${task.project_name})`,
-      group: task.project_id, // Group nodes by project
-    }))
+    data.tasks.map(task => {
+      const projectColor = getProjectColor(task.project_id);
+      return {
+        id: task.id,
+        label: task.title,
+        group: task.project_id, // Group nodes by project
+        color: {
+          background: projectColor.background,
+          border: projectColor.border,
+          highlight: {
+            background: projectColor.background,
+            border: '#6366f1'
+          },
+          hover: {
+            background: projectColor.background,
+            border: '#6366f1'
+          }
+        },
+        font: {
+          color: projectColor.text
+        }
+      };
+    })
   );
 
   // 2. Create edges
@@ -3009,15 +3148,7 @@ function renderVisGraph(data) {
         size: 12,
         face: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
       },
-      borderWidth: 1,
-      color: {
-          border: '#e2e8f0',
-          background: '#ffffff',
-          highlight: {
-              border: '#6366f1',
-              background: '#eef2ff'
-          }
-      }
+      borderWidth: 2,
     },
     physics: {
       enabled: false, // Disable physics for faster hierarchical layout
@@ -3031,7 +3162,226 @@ function renderVisGraph(data) {
 
   // 5. Initialize the Network
   const network = new vis.Network(container, graphData, options);
+
+  // 6. Add click event for nodes
+  network.on("click", (params) => {
+    isHandlingNodeClick = true;
+    
+    if (params.nodes.length > 0) {
+      const nodeId = params.nodes[0];
+      const task = data.tasks.find(t => t.id === nodeId);
+      if (task) {
+        // Use setTimeout to prevent immediate closing by document click handler
+        setTimeout(() => {
+          showTaskDetailPopup(task, params.event);
+          isHandlingNodeClick = false;
+        }, 10);
+      } else {
+        isHandlingNodeClick = false;
+      }
+    } else {
+      // Click on empty space - close popup
+      hideTaskDetailPopup();
+      isHandlingNodeClick = false;
+    }
+  });
+
+  // 7. Render project legend
+  renderProjectLegend(data);
 }
+
+// Task detail popup management
+let taskDetailPopup = null;
+let currentPopupTask = null;
+let isHandlingNodeClick = false;
+
+function getTaskDetailPopup() {
+  if (!taskDetailPopup) {
+    taskDetailPopup = document.getElementById("task-detail-popup");
+  }
+  return taskDetailPopup;
+}
+
+// Format date for display
+function formatDate(dateString) {
+  if (!dateString) return "Not set";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("en-US", { 
+    year: "numeric", 
+    month: "short", 
+    day: "numeric" 
+  });
+}
+
+// Format status for display
+function formatStatus(status) {
+  const statusMap = {
+    "new_task": "New Task",
+    "scheduled": "Scheduled",
+    "in_progress": "In Progress",
+    "completed": "Completed"
+  };
+  return statusMap[status] || status;
+}
+
+// Show task detail popup
+async function showTaskDetailPopup(task, event) {
+  const popup = getTaskDetailPopup();
+  if (!popup) return;
+
+  // If clicking the same task, close it
+  if (currentPopupTask && currentPopupTask.id === task.id && !popup.classList.contains('hidden')) {
+    hideTaskDetailPopup();
+    return;
+  }
+
+  currentPopupTask = task;
+  
+  // Try to get full task details from API
+  let fullTask = task;
+  try {
+    // Try to get task from project tasks endpoint
+    const projectTasks = await apiRequest(`/projects/${task.project_id}/tasks`);
+    const foundTask = projectTasks.find(t => t.id === task.id);
+    if (foundTask) {
+      fullTask = foundTask;
+    }
+  } catch (error) {
+    console.error("Failed to load full task details:", error);
+    // Use the task from dependency map data
+  }
+
+  const projectColor = getProjectColor(task.project_id);
+  
+  // Build popup content
+  const description = fullTask.description ? escapeHtml(fullTask.description) : "No description";
+  const status = formatStatus(fullTask.status || "new_task");
+  const dueDate = formatDate(fullTask.due_date);
+  const createdAt = formatDate(fullTask.created_at);
+  const assignees = fullTask.assignees && fullTask.assignees.length > 0 
+    ? fullTask.assignees.map(a => escapeHtml(a.username)).join(", ")
+    : "No assignees";
+
+  const popupContent = `
+    <div class="task-popup-header" style="border-left-color: ${projectColor.border};">
+      <div class="task-popup-title">${escapeHtml(fullTask.title)}</div>
+      <div class="task-popup-project" style="color: ${projectColor.text};">
+        📁 ${escapeHtml(task.project_name)}
+      </div>
+      <button class="task-popup-close">×</button>
+    </div>
+    <div class="task-popup-body">
+      <div class="task-popup-section">
+        <div class="task-popup-label">Description</div>
+        <div class="task-popup-value">${description}</div>
+      </div>
+      <div class="task-popup-info-grid">
+        <div class="task-popup-info-item">
+          <div class="task-popup-label">Status</div>
+          <div class="task-popup-value">${status}</div>
+        </div>
+        <div class="task-popup-info-item">
+          <div class="task-popup-label">Due Date</div>
+          <div class="task-popup-value">${dueDate}</div>
+        </div>
+        <div class="task-popup-info-item">
+          <div class="task-popup-label">Created At</div>
+          <div class="task-popup-value">${createdAt}</div>
+        </div>
+        <div class="task-popup-info-item">
+          <div class="task-popup-label">Task ID</div>
+          <div class="task-popup-value">#${fullTask.id}</div>
+        </div>
+      </div>
+      <div class="task-popup-section">
+        <div class="task-popup-label">Assignees</div>
+        <div class="task-popup-value">${assignees}</div>
+      </div>
+    </div>
+  `;
+
+  popup.innerHTML = popupContent;
+  popup.classList.remove("hidden");
+
+  // Add close button event
+  const closeBtn = popup.querySelector(".task-popup-close");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", hideTaskDetailPopup);
+  }
+
+  // Position popup near the click event
+  if (event) {
+    positionPopup(popup, event);
+  } else {
+    // Center on screen if no event
+    centerPopup(popup);
+  }
+}
+
+// Position popup near click event
+function positionPopup(popup, event) {
+  const rect = popup.getBoundingClientRect();
+  const x = event.center ? event.center.x : (event.clientX || window.innerWidth / 2);
+  const y = event.center ? event.center.y : (event.clientY || window.innerHeight / 2);
+  
+  let left = x + 20;
+  let top = y - rect.height / 2;
+  
+  // Adjust if popup goes off screen
+  if (left + rect.width > window.innerWidth) {
+    left = x - rect.width - 20;
+  }
+  if (top < 20) {
+    top = 20;
+  }
+  if (top + rect.height > window.innerHeight - 20) {
+    top = window.innerHeight - rect.height - 20;
+  }
+  
+  popup.style.left = `${left}px`;
+  popup.style.top = `${top}px`;
+}
+
+// Center popup on screen
+function centerPopup(popup) {
+  const rect = popup.getBoundingClientRect();
+  const left = (window.innerWidth - rect.width) / 2;
+  const top = (window.innerHeight - rect.height) / 2;
+  popup.style.left = `${left}px`;
+  popup.style.top = `${top}px`;
+}
+
+// Hide task detail popup
+function hideTaskDetailPopup() {
+  const popup = getTaskDetailPopup();
+  if (popup) {
+    popup.classList.add("hidden");
+    currentPopupTask = null;
+  }
+}
+
+// Add click event listener to close popup when clicking outside
+document.addEventListener('click', (event) => {
+  // Don't handle if we're currently processing a node click
+  if (isHandlingNodeClick) {
+    return;
+  }
+  
+  const popup = getTaskDetailPopup();
+  if (popup && !popup.classList.contains('hidden')) {
+    // Check if click is outside the popup
+    if (!popup.contains(event.target)) {
+      // Check if click is not on a vis.js canvas (vis.js handles its own events)
+      const visContainer = document.getElementById("vis-graph-container");
+      if (visContainer && visContainer.contains(event.target)) {
+        // Click is on vis.js canvas, let vis.js handle it
+        return;
+      }
+      // Close popup when clicking outside
+      hideTaskDetailPopup();
+    }
+  }
+});
 
 
 async function handleAddDependency(event) {
@@ -3098,6 +3448,33 @@ async function loadNotifications(force = false) {
   }
 }
 
+// Function to render project node for notifications
+function renderProjectNode(projectId, projectName) {
+  if (!projectId || !projectName) return "";
+  const projectColor = getProjectColor(projectId);
+  return `
+    <span class="notification-project-node" 
+          style="background-color: ${projectColor.background}; border-color: ${projectColor.border}; color: ${projectColor.text};"
+          data-project-id="${projectId}">
+      📁 ${escapeHtml(projectName)}
+    </span>
+  `;
+}
+
+// Function to render task node for notifications
+function renderNotificationTaskNode(taskId, taskTitle, projectId) {
+  if (!taskId || !taskTitle) return "";
+  const projectColor = getProjectColor(projectId);
+  return `
+    <span class="notification-task-node" 
+          style="background-color: ${projectColor.background}; border-color: ${projectColor.border}; color: ${projectColor.text};"
+          data-task-id="${taskId}"
+          data-task-project-id="${projectId}">
+      ${escapeHtml(taskTitle)}
+    </span>
+  `;
+}
+
 function renderNotifications() {
   if (!notificationsList) return;
   notificationsList.innerHTML = "";
@@ -3117,29 +3494,89 @@ function renderNotifications() {
       item.classList.add("unread");
     }
     
-    // Add data attributes for linking
-    if (notification.task_id) {
-        item.dataset.taskId = notification.task_id;
+    // Build location section with styled nodes
+    const locationParts = [];
+    if (notification.project_id && notification.project_name) {
+      locationParts.push(renderProjectNode(notification.project_id, notification.project_name));
     }
-    if (notification.project_id) {
-        item.dataset.projectId = notification.project_id;
+    if (notification.task_id && notification.task_title) {
+      locationParts.push(renderNotificationTaskNode(
+        notification.task_id, 
+        notification.task_title, 
+        notification.project_id
+      ));
     }
-
-    const locationBits = [];
-    if (notification.project_name) {
-      locationBits.push(notification.project_name);
-    }
-    if (notification.task_title) {
-      locationBits.push(notification.task_title);
-    }
-    const location = locationBits.length > 0 ? ` • ${locationBits.join(" → ")}` : "";
+    const locationHtml = locationParts.length > 0 
+      ? `<div class="notification-location">${locationParts.join('<span class="notification-arrow"> → </span>')}</div>`
+      : "";
 
     item.innerHTML = `
-      <div>
-        <p class="notification-message">${escapeHtml(notification.message)}${escapeHtml(location)}</p>
+      <div class="notification-content">
+        <p class="notification-message">${escapeHtml(notification.message)}</p>
+        ${locationHtml}
         <span class="notification-time">${new Date(notification.created_at).toLocaleString()}</span>
       </div>
     `;
+
+    // Add click events to project and task nodes
+    const projectNode = item.querySelector('.notification-project-node');
+    if (projectNode && notification.project_id) {
+      projectNode.style.cursor = 'pointer';
+      projectNode.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Switch to taskboard view and select the project
+        if (notification.project_id) {
+          selectProject(notification.project_id);
+          showTabView("taskboard");
+        }
+      });
+    }
+
+    const taskNode = item.querySelector('.notification-task-node');
+    if (taskNode && notification.task_id) {
+      taskNode.style.cursor = 'pointer';
+      taskNode.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        // Switch to taskboard view and select the project
+        if (notification.project_id) {
+          // Select project and load tasks
+          await selectProject(notification.project_id);
+          showTabView("taskboard");
+          
+          // Wait for tasks to load, then open task detail
+          // Use a small delay to ensure tasks are loaded and rendered
+          setTimeout(async () => {
+            try {
+              // Try to open task detail panel (this opens the side panel)
+              const task = allTasks.find(t => t.id === notification.task_id);
+              if (task) {
+                await openTaskDetail(notification.task_id);
+              } else {
+                // If task not found, it might be in a different project or deleted
+                // Show a popup with basic info
+                const taskForPopup = {
+                  id: notification.task_id,
+                  title: notification.task_title,
+                  project_id: notification.project_id,
+                  project_name: notification.project_name
+                };
+                showTaskDetailPopup(taskForPopup, e);
+              }
+            } catch (error) {
+              console.error("Failed to open task detail:", error);
+              // Fallback: show popup
+              const taskForPopup = {
+                id: notification.task_id,
+                title: notification.task_title,
+                project_id: notification.project_id,
+                project_name: notification.project_name
+              };
+              showTaskDetailPopup(taskForPopup, e);
+            }
+          }, 200); // Wait for project selection and task loading
+        }
+      });
+    }
 
     if (!notification.read) {
       const btn = document.createElement("button");
