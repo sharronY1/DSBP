@@ -1,3 +1,11 @@
+"""FastAPI application entry point for DSBP web app.
+
+This module wires together authentication, project/task management,
+dependency visualization, notifications, and static frontend serving.
+Alongside the API routes, it also includes a handful of helper utilities
+that encapsulate permission checks and dependency-graph logic.
+"""
+
 import re
 from datetime import timedelta
 from pathlib import Path
@@ -13,9 +21,10 @@ from sqlalchemy.orm import Session
 from . import auth, models, schemas
 from .database import Base, engine, get_db
 
+# create all tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Kanban Web App")
+app = FastAPI(title="DSBP Web App")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,13 +34,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# mount frontend static files
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
 
+# mention pattern for @username for find users
 MENTION_PATTERN = re.compile(r"@(?P<username>[A-Za-z0-9_\.\-]+)")
 
 
 def parse_mentions(content: str, db: Session) -> List[models.User]:
+    """Extract all mentioned users from the supplied content string."""
     usernames = {match.group("username") for match in MENTION_PATTERN.finditer(content)}
     if not usernames:
         return []
@@ -39,6 +51,7 @@ def parse_mentions(content: str, db: Session) -> List[models.User]:
 
 
 def user_can_access_project(project: models.Project, user: models.User) -> bool:
+    """Return True if the provided user may view the given project."""
     if project.owner_id == user.id:
         return True
     if project.visibility == "all":
@@ -49,6 +62,7 @@ def user_can_access_project(project: models.Project, user: models.User) -> bool:
 
 
 def ensure_project_access(project_id: int, db: Session, user: models.User) -> models.Project:
+    """Fetch a project and ensure the current user is allowed to access it."""
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
@@ -58,6 +72,7 @@ def ensure_project_access(project_id: int, db: Session, user: models.User) -> mo
 
 
 def accessible_projects_filter(user: models.User):
+    """SQLAlchemy filter expression for all projects accessible to a user."""
     return or_(
         models.Project.owner_id == user.id,
         models.Project.visibility == "all",
@@ -66,6 +81,7 @@ def accessible_projects_filter(user: models.User):
 
 
 def ensure_task_access(task_id: int, db: Session, user: models.User) -> models.Task:
+    """Fetch a task and verify the current user is allowed to interact with it."""
     task = db.query(models.Task).filter(models.Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -77,6 +93,7 @@ def ensure_task_access(task_id: int, db: Session, user: models.User) -> models.T
 def apply_project_visibility(
     project: models.Project, visibility: str, shared_usernames: Optional[Iterable[str]], db: Session
 ) -> None:
+    """Update a project's visibility mode and synchronize shared users."""
     project.visibility = visibility
     if visibility != "selected":
         project.shared_users.clear()
@@ -105,8 +122,11 @@ def apply_project_visibility(
     )
 
 
+# --- Authentication endpoints -------------------------------------------------
+
 @app.post("/auth/register", response_model=schemas.UserOut, status_code=status.HTTP_201_CREATED)
 def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
+    """Create a new user after confirming username and email uniqueness."""
     if db.query(models.User).filter(models.User.username == user_in.username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
     if db.query(models.User).filter(models.User.email == user_in.email).first():
@@ -124,6 +144,7 @@ def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/auth/login", response_model=schemas.Token)
 def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+    """Authenticate a user and return a freshly minted access token."""
     user = db.query(models.User).filter(models.User.username == credentials.username).first()
     if not user or not auth.verify_password(credentials.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -131,13 +152,17 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     return schemas.Token(access_token=access_token)
 
 
+# --- User endpoints -----------------------------------------------------------
+
 @app.get("/users/me", response_model=schemas.UserOut)
 def read_current_user(current_user: models.User = Depends(auth.get_current_user)):
+    """Return the profile for the currently authenticated user."""
     return current_user
 
 
 @app.get("/users", response_model=List[schemas.UserOut])
 def list_users(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    """List all registered users, ordered alphabetically."""
     return (
         db.query(models.User)
         .order_by(models.User.username.asc())
@@ -145,8 +170,11 @@ def list_users(db: Session = Depends(get_db), current_user: models.User = Depend
     )
 
 
+# --- Project endpoints --------------------------------------------------------
+
 @app.get("/projects", response_model=List[schemas.ProjectOut])
 def list_projects(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    """Return the projects visible to the current user."""
     projects = (
         db.query(models.Project)
         .filter(accessible_projects_filter(current_user))
@@ -163,6 +191,7 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Create a project owned by the current user with the requested visibility."""
     project = models.Project(
         name=project_in.name,
         description=project_in.description,
@@ -184,6 +213,7 @@ def update_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Update mutable project fields and optionally its visibility scope."""
     project = (
         db.query(models.Project)
         .filter(models.Project.id == project_id, models.Project.owner_id == current_user.id)
@@ -208,6 +238,7 @@ def update_project(
 
 @app.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    """Remove a project that belongs to the current user."""
     project = db.query(models.Project).filter(models.Project.id == project_id, models.Project.owner_id == current_user.id).first()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
@@ -215,12 +246,15 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
     db.commit()
 
 
+# --- Task endpoints -----------------------------------------------------------
+
 @app.get("/projects/{project_id}/tasks", response_model=List[schemas.TaskOut])
 def list_tasks(
     project_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """List all tasks for a project, enforcing project access control."""
     project = ensure_project_access(project_id, db, current_user)
     return db.query(models.Task).filter(models.Task.project_id == project.id).all()
 
@@ -230,6 +264,7 @@ def list_all_accessible_tasks(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Return every task across projects the user is allowed to see."""
     tasks = (
         db.query(models.Task)
         .join(models.Project)
@@ -247,6 +282,7 @@ def create_task(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Create a task inside a project the user can access and set assignees."""
     project = ensure_project_access(task_in.project_id, db, current_user)
     task = models.Task(
         title=task_in.title,
@@ -275,6 +311,7 @@ def update_task(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Apply partial updates to a task and optionally reset its assignees."""
     task = ensure_task_access(task_id, db, current_user)
     
     update_data = task_update.dict(exclude_unset=True)
@@ -299,12 +336,14 @@ def delete_task(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Remove a task after verifying the user may access it."""
     task = ensure_task_access(task_id, db, current_user)
     db.delete(task)
     db.commit()
 
 
 def _dependency_summary(task: models.Task) -> schemas.TaskSummary:
+    """Build a display-friendly summary object for the provided task."""
     project_name = task.project.name if task.project else "Unknown"
     return schemas.TaskSummary(
         id=task.id,
@@ -315,6 +354,7 @@ def _dependency_summary(task: models.Task) -> schemas.TaskSummary:
 
 
 def _build_dependency_map(tasks: List[models.Task], dependencies: List[models.TaskDependency]):
+    """Assemble nodes, edges, linear chains, and convergences for the graph view."""
     summaries: Dict[int, schemas.TaskSummary] = {task.id: _dependency_summary(task) for task in tasks}
     indegree: Dict[int, int] = {task.id: 0 for task in tasks}
     outdegree: Dict[int, int] = {task.id: 0 for task in tasks}
@@ -412,6 +452,7 @@ def _build_dependency_map(tasks: List[models.Task], dependencies: List[models.Ta
 def _creates_dependency_cycle(
     db: Session, depends_on_task_id: int, dependent_task_id: int
 ) -> bool:
+    """Depth-first search to ensure new dependency edges do not form a cycle."""
     stack = [dependent_task_id]
     visited: Set[int] = set()
     while stack:
@@ -430,12 +471,15 @@ def _creates_dependency_cycle(
     return False
 
 
+# --- Dependency graph endpoints ----------------------------------------------
+
 @app.post("/task-dependencies", response_model=schemas.TaskDependencyOut, status_code=status.HTTP_201_CREATED)
 def create_task_dependency(
     dependency_in: schemas.TaskDependencyCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Create a dependency edge after validating access, uniqueness, and acyclicity."""
     dependent_task = ensure_task_access(dependency_in.dependent_task_id, db, current_user)
     depends_on_task = ensure_task_access(dependency_in.depends_on_task_id, db, current_user)
 
@@ -472,6 +516,7 @@ def delete_task_dependency(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Delete a dependency edge if it exists and the user can access both tasks."""
     dependency = db.query(models.TaskDependency).filter(models.TaskDependency.id == dependency_id).first()
     if not dependency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dependency not found")
@@ -488,6 +533,7 @@ def dependency_map(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Return the dependency graph focused on tasks accessible to the user."""
     tasks = (
         db.query(models.Task)
         .join(models.Project)
@@ -508,12 +554,15 @@ def dependency_map(
     return _build_dependency_map(tasks, dependencies)
 
 
+# --- Comment and notification endpoints --------------------------------------
+
 @app.get("/tasks/{task_id}/comments", response_model=List[schemas.CommentOut])
 def list_comments(
     task_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Return the top-level comments for a task the user can access."""
     task = db.query(models.Task).filter(models.Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -533,6 +582,7 @@ def create_comment(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Create a comment (optionally threaded) and notify mentioned users."""
     task = db.query(models.Task).filter(models.Task.id == comment_in.task_id).first()
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -578,6 +628,7 @@ def create_comment(
 
 @app.post("/comments/{comment_id}/solve", response_model=schemas.CommentOut)
 def solve_comment(comment_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    """Mark a comment thread as resolved if the user has sufficient rights."""
     comment = (
         db.query(models.Comment)
         .join(models.Task)
@@ -609,6 +660,7 @@ def solve_comment(comment_id: int, db: Session = Depends(get_db), current_user: 
 
 @app.get("/notifications", response_model=List[schemas.NotificationOut])
 def list_notifications(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    """List notifications for the current user in reverse chronological order."""
     notifications = (
         db.query(models.Notification)
         .filter(models.Notification.recipient_id == current_user.id)
@@ -620,6 +672,7 @@ def list_notifications(db: Session = Depends(get_db), current_user: models.User 
 
 @app.post("/notifications/{notification_id}/read", response_model=schemas.NotificationOut)
 def mark_notification_read(notification_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    """Mark an individual notification as read."""
     notification = (
         db.query(models.Notification)
         .filter(models.Notification.id == notification_id, models.Notification.recipient_id == current_user.id)
@@ -633,17 +686,22 @@ def mark_notification_read(notification_id: int, db: Session = Depends(get_db), 
     return notification
 
 
+# --- Frontend routes ---------------------------------------------------------
+
 @app.get("/", include_in_schema=False)
 def serve_frontend():
+    """Serve the compiled SPA index page."""
     index_path = frontend_dir / "index.html"
     return FileResponse(index_path)
 
 
 @app.get("/login", include_in_schema=False)
 def serve_login():
+    """Serve the standalone login HTML page."""
     return FileResponse(frontend_dir / "login.html")
 
 
 @app.get("/register", include_in_schema=False)
 def serve_register():
+    """Serve the standalone registration HTML page."""
     return FileResponse(frontend_dir / "register.html")
