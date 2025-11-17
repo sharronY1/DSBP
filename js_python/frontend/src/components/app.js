@@ -1580,6 +1580,17 @@ function logoutUser() {
   redirectToLogin();
 }
 
+// Simple client-side tab routing using URL hash
+function getTabFromLocation() {
+  const hash = window.location.hash.replace("#", "").toLowerCase();
+  const validTabs = ["dashboard", "taskboard", "dependency", "notifications"];
+  if (validTabs.includes(hash)) {
+    return hash;
+  }
+  // Default tab
+  return "dashboard";
+}
+
 // Initialize App
 async function initializeApp() {
   if (!token) {
@@ -1602,7 +1613,10 @@ async function initializeApp() {
 
 
     await loadProjects();
-    showTabView("dashboard");
+
+    // Determine initial tab from URL hash
+    const initialTab = getTabFromLocation();
+    showTabView(initialTab);
 
     // Select first project by default
     if (allProjects.length > 0) {
@@ -1713,10 +1727,10 @@ function getStatusLabel(status) {
 
 function getStatusColorHex(status) {
   const colors = {
-    new_task: "#facc15",
-    scheduled: "#fb923c",
-    in_progress: "#f97316",
-    completed: "#8b5cf6",
+    new_task: "#facc15",    // yellow
+    scheduled: "#8b5cf6",   // purple
+    in_progress: "#3b82f6", // blue
+    completed: "#22c55e",   // green
     default: "#94a3b8",
   };
   return colors[status] || colors.default;
@@ -3216,8 +3230,17 @@ function showTabView(tabName) {
 tabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     const tabName = tab.dataset.tab;
+    // Update hash so each tab has its own URL, e.g. #dashboard, #taskboard
+    window.location.hash = tabName;
     showTabView(tabName);
   });
+});
+
+// Handle back/forward navigation and manual hash edits
+// monitor url changes
+window.addEventListener("hashchange", () => {
+  const tabName = getTabFromLocation();
+  showTabView(tabName);
 });
 
 // Modal Close Buttons

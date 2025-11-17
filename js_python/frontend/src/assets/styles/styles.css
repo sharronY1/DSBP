@@ -6,10 +6,12 @@
 }
 
 :root {
-  --status-color-new_task: #facc15;
-  --status-color-scheduled: #fb923c;
-  --status-color-in_progress: #f97316;
-  --status-color-completed: #8b5cf6;
+  /* Dashboard status colors */
+  /* new_task: yellow, scheduled: purple, in_progress: blue, completed: green */
+  --status-color-new_task: #facc15;     /* yellow */
+  --status-color-scheduled: #8b5cf6;    /* purple */
+  --status-color-in_progress: #3b82f6;  /* blue */
+  --status-color-completed: #22c55e;    /* green */
   --status-color-default: #94a3b8;
 }
 
