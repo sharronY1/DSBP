@@ -492,11 +492,11 @@ body {
 
 .side-panel-header {
   padding: 24px;
+  padding-right: 90px; /* Reserve space for close button */
   border-bottom: 1px solid #e2e8f0;
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: 16px;
   flex-shrink: 0;
 }
 
@@ -508,7 +508,7 @@ body {
   padding: 8px;
   border-radius: 6px;
   transition: background 0.2s;
-  margin-right: 40px; /* Space for close button */
+  margin-right: 4px;
 }
 
 .task-title-edit:hover {
@@ -533,6 +533,9 @@ body {
   font-size: 14px;
   font-weight: 500;
   transition: background 0.2s;
+  align-self: flex-start;
+  margin-left: auto;
+  margin-right: 72px; /* Keep distance from the close (X) button */
 }
 
 .btn-delete:hover {
