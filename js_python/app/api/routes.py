@@ -186,6 +186,36 @@ def list_projects(db: Session = Depends(get_db), current_user: models.User = Dep
     return projects
 
 
+@router.get("/projects/{project_id}/members", response_model=List[schemas.UserOut])
+def get_project_members(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Get all members who can access a project for @mentions."""
+    project = ensure_project_access(project_id, db, current_user)
+    
+    # Collect all users who can access this project
+    members = set()
+    
+    # Add owner
+    if project.owner:
+        members.add(project.owner)
+    
+    # Add shared users
+    if project.visibility == "selected":
+        for user in project.shared_users:
+            members.add(user)
+    elif project.visibility == "all":
+        # All users in the system can access
+        all_users = db.query(models.User).all()
+        members.update(all_users)
+    
+    # Sort by username
+    sorted_members = sorted(members, key=lambda u: u.username.lower())
+    return sorted_members
+
+
 @router.get("/projects/{project_id}/dashboard", response_model=schemas.ProjectDashboardOut)
 def project_dashboard_summary(
     project_id: int,
@@ -221,6 +251,17 @@ def create_project(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Create a project owned by the current user with the requested visibility."""
+    # Check for duplicate project name
+    existing = db.query(models.Project).filter(
+        models.Project.name == project_in.name,
+        models.Project.owner_id == current_user.id
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project name already exists"
+        )
+    
     project = models.Project(
         name=project_in.name,
         description=project_in.description,

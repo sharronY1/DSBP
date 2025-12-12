@@ -1663,13 +1663,31 @@ function renderProjects() {
     }
 
     const color = colors[index % colors.length];
+    
+    // Check if current user is owner
+    const isOwner = currentUser && project.owner_id === currentUser.id;
 
     li.innerHTML = `
       <div class="project-icon" style="background-color: ${color}"></div>
       <span>${escapeHtml(project.name)}</span>
+      ${isOwner ? '<button class="btn-delete-project" title="Delete project">🗑️</button>' : ''}
     `;
 
-    li.addEventListener("click", () => selectProject(project.id));
+    // Add click handler for project selection (not on delete button)
+    const projectName = li.querySelector('span');
+    const projectIcon = li.querySelector('.project-icon');
+    projectName.addEventListener("click", () => selectProject(project.id));
+    projectIcon.addEventListener("click", () => selectProject(project.id));
+    
+    // Add delete button handler if owner
+    if (isOwner) {
+      const deleteBtn = li.querySelector('.btn-delete-project');
+      deleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        confirmDeleteProject(project.id, project.name);
+      });
+    }
+    
     projectsList.appendChild(li);
   });
 }
@@ -2102,6 +2120,9 @@ async function openTaskDetail(taskId) {
     console.error("Failed to load comments:", error);
     currentTask.comments = [];
   }
+  
+  // Load project members for @mentions
+  await loadProjectMembers();
 
   renderTaskDetail();
   taskDetailPanel.classList.remove("hidden");
@@ -2378,6 +2399,61 @@ function hideModal(modal) {
     userSelectorCallback = null;
     selectedUserIds = [];
   }
+}
+
+// Confirmation Dialog
+let confirmCallback = null;
+
+function showConfirmDialog(title, message, onConfirm) {
+  const dialog = document.getElementById("confirm-dialog");
+  const titleEl = document.getElementById("confirm-dialog-title");
+  const messageEl = document.getElementById("confirm-dialog-message");
+  
+  if (titleEl) titleEl.textContent = title;
+  if (messageEl) messageEl.textContent = message;
+  
+  confirmCallback = onConfirm;
+  dialog.classList.remove("hidden");
+}
+
+function hideConfirmDialog() {
+  const dialog = document.getElementById("confirm-dialog");
+  dialog.classList.add("hidden");
+  confirmCallback = null;
+}
+
+// Confirm Delete Project
+async function confirmDeleteProject(projectId, projectName) {
+  showConfirmDialog(
+    "Delete Project",
+    `Are you sure? This operation can not be retrieved.`,
+    async () => {
+      try {
+        await apiRequest(`/projects/${projectId}`, {
+          method: "DELETE",
+        });
+        
+        // If deleted project was selected, clear selection
+        if (currentProject && currentProject.id === projectId) {
+          currentProject = null;
+        }
+        
+        await loadProjects();
+        renderDashboardProjectInfo();
+        populateProjectSettingsForm();
+        
+        // Select first project if available
+        if (allProjects.length > 0) {
+          selectProject(allProjects[0].id);
+        }
+        
+        hideConfirmDialog();
+      } catch (error) {
+        hideConfirmDialog();
+        alert("Failed to delete project: " + error.message);
+      }
+    }
+  );
 }
 
 // Open User Selector
@@ -3867,12 +3943,163 @@ if (btnAddAssignee) {
   });
 }
 
-// Add Comment Form
+// Add Comment Form with @ mention autocomplete
+let projectMembers = [];
+let mentionDropdownVisible = false;
+let mentionStartPos = -1;
+let selectedMentionIndex = 0;
+
+async function loadProjectMembers() {
+  if (!currentProject) return;
+  try {
+    projectMembers = await apiRequest(`/projects/${currentProject.id}/members`);
+  } catch (error) {
+    console.error("Failed to load project members:", error);
+    projectMembers = [];
+  }
+}
+
+function showMentionDropdown(query) {
+  const dropdown = document.getElementById("mention-dropdown");
+  if (!dropdown) return;
+  
+  const filtered = projectMembers.filter(user => 
+    user.username.toLowerCase().startsWith(query.toLowerCase())
+  );
+  
+  if (filtered.length === 0) {
+    dropdown.classList.add("hidden");
+    mentionDropdownVisible = false;
+    return;
+  }
+  
+  dropdown.innerHTML = "";
+  filtered.forEach((user, index) => {
+    const item = document.createElement("div");
+    item.className = "mention-item";
+    if (index === selectedMentionIndex) {
+      item.classList.add("selected");
+    }
+    
+    const avatar = document.createElement("div");
+    avatar.className = `mention-avatar color-${user.id % 8}`;
+    avatar.textContent = getInitials(user.username);
+    
+    const username = document.createElement("span");
+    username.className = "mention-username";
+    username.textContent = user.username;
+    
+    item.appendChild(avatar);
+    item.appendChild(username);
+    
+    item.addEventListener("click", () => {
+      insertMention(user.username);
+    });
+    
+    dropdown.appendChild(item);
+  });
+  
+  dropdown.classList.remove("hidden");
+  mentionDropdownVisible = true;
+}
+
+function hideMentionDropdown() {
+  const dropdown = document.getElementById("mention-dropdown");
+  if (dropdown) {
+    dropdown.classList.add("hidden");
+  }
+  mentionDropdownVisible = false;
+  mentionStartPos = -1;
+  selectedMentionIndex = 0;
+}
+
+function insertMention(username) {
+  const commentInput = document.getElementById("comment-input");
+  if (!commentInput) return;
+  
+  const value = commentInput.value;
+  const beforeMention = value.substring(0, mentionStartPos);
+  const afterMention = value.substring(commentInput.selectionStart);
+  
+  commentInput.value = beforeMention + "@" + username + " " + afterMention;
+  const newPos = beforeMention.length + username.length + 2;
+  commentInput.setSelectionRange(newPos, newPos);
+  commentInput.focus();
+  
+  hideMentionDropdown();
+}
+
 const formAddComment = document.getElementById("form-add-comment");
+const commentInput = document.getElementById("comment-input");
+
+if (commentInput) {
+  commentInput.addEventListener("input", (e) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    
+    // Find @ symbol before cursor
+    let atPos = -1;
+    for (let i = cursorPos - 1; i >= 0; i--) {
+      if (value[i] === "@") {
+        atPos = i;
+        break;
+      }
+      if (value[i] === " " || value[i] === "\n") {
+        break;
+      }
+    }
+    
+    if (atPos !== -1) {
+      mentionStartPos = atPos;
+      const query = value.substring(atPos + 1, cursorPos);
+      showMentionDropdown(query);
+    } else {
+      hideMentionDropdown();
+    }
+  });
+  
+  commentInput.addEventListener("keydown", (e) => {
+    if (!mentionDropdownVisible) return;
+    
+    const dropdown = document.getElementById("mention-dropdown");
+    const items = dropdown ? dropdown.querySelectorAll(".mention-item") : [];
+    
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      selectedMentionIndex = (selectedMentionIndex + 1) % items.length;
+      items.forEach((item, idx) => {
+        item.classList.toggle("selected", idx === selectedMentionIndex);
+      });
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      selectedMentionIndex = (selectedMentionIndex - 1 + items.length) % items.length;
+      items.forEach((item, idx) => {
+        item.classList.toggle("selected", idx === selectedMentionIndex);
+      });
+    } else if (e.key === "Enter" && items.length > 0) {
+      e.preventDefault();
+      const selectedUser = projectMembers.filter(user => 
+        user.username.toLowerCase().startsWith(
+          commentInput.value.substring(mentionStartPos + 1, commentInput.selectionStart).toLowerCase()
+        )
+      )[selectedMentionIndex];
+      if (selectedUser) {
+        insertMention(selectedUser.username);
+      }
+    } else if (e.key === "Escape") {
+      hideMentionDropdown();
+    }
+  });
+  
+  commentInput.addEventListener("blur", () => {
+    // Delay to allow click on dropdown
+    setTimeout(hideMentionDropdown, 200);
+  });
+}
+
 if (formAddComment) {
   formAddComment.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const commentInput = document.getElementById("comment-input");
     if (commentInput) {
       await addComment(commentInput.value);
     }
@@ -3896,6 +4123,22 @@ if (userSearchInput) {
         item.style.display = "none";
       }
     });
+  });
+}
+
+// Confirm Dialog Handlers
+const confirmDialogCancel = document.getElementById("confirm-dialog-cancel");
+const confirmDialogConfirm = document.getElementById("confirm-dialog-confirm");
+
+if (confirmDialogCancel) {
+  confirmDialogCancel.addEventListener("click", hideConfirmDialog);
+}
+
+if (confirmDialogConfirm) {
+  confirmDialogConfirm.addEventListener("click", () => {
+    if (confirmCallback) {
+      confirmCallback();
+    }
   });
 }
 

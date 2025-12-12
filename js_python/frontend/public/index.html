@@ -332,7 +332,10 @@
           <div id="comments-list" class="comments-list">
             </div>
           <form id="form-add-comment" class="comment-form">
-            <input type="text" placeholder="Add Comment" id="comment-input" />
+            <div class="comment-input-wrapper">
+              <input type="text" placeholder="Add Comment" id="comment-input" autocomplete="off" />
+              <div id="mention-dropdown" class="mention-dropdown hidden"></div>
+            </div>
             <button type="submit" class="btn-comment-submit">💬 Add Comment</button>
           </form>
         </div>
@@ -380,6 +383,17 @@
             <button type="submit" class="btn-primary">Add Task</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div id="confirm-dialog" class="confirm-dialog hidden">
+      <div class="confirm-dialog-content">
+        <div class="confirm-dialog-title" id="confirm-dialog-title">Confirm</div>
+        <div class="confirm-dialog-message" id="confirm-dialog-message">Are you sure?</div>
+        <div class="confirm-dialog-actions">
+          <button type="button" class="btn-secondary" id="confirm-dialog-cancel">Cancel</button>
+          <button type="button" class="btn-primary" id="confirm-dialog-confirm">Yes</button>
+        </div>
       </div>
     </div>
 
