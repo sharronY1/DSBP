@@ -7,4 +7,5 @@ python-jose==3.3.0
 pydantic==2.12.4
 email-validator
 httpx==0.27.0
+pytest==8.3.4
 
