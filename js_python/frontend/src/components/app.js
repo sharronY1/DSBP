@@ -1668,7 +1668,7 @@ function renderProjects() {
     const isOwner = currentUser && project.owner_id === currentUser.id;
 
     li.innerHTML = `
-      <div class="project-icon" style="background-color: ${color}"></div>
+      <div class="project-icon" style="--project-color: ${color};"></div>
       <span>${escapeHtml(project.name)}</span>
       ${isOwner ? '<button class="btn-delete-project" title="Delete project">🗑️</button>' : ''}
     `;
@@ -1864,7 +1864,19 @@ function formatFullDateLabel(dateKey) {
 }
 
 function formatTimeLabel(isoString) {
-  return new Date(isoString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (!isoString) return "--:--";
+
+  let normalized = isoString;
+  if (typeof isoString === "string" && !/(Z|[+-]\d{2}:?\d{2})$/i.test(isoString)) {
+    normalized = `${isoString}Z`;
+  }
+
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) {
+    return "--:--";
+  }
+
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function describeActivity(activity) {

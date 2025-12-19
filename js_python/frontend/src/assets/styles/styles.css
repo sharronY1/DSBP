@@ -227,12 +227,13 @@ body {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #6366f1;
+  background: var(--project-color, #94a3b8);
   flex-shrink: 0;
+  transition: background 0.2s;
 }
 
 .project-item.active .project-icon {
-  background: white;
+  background: #fff;
 }
 
 .project-item > span {
