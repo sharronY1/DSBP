@@ -2259,7 +2259,7 @@ function createCommentElement(comment) {
         <span class="comment-author">${escapeHtml(comment.author.username)}</span>
         <span class="comment-time">${timeAgo}</span>
       </div>
-      <div class="comment-text">${escapeHtml(comment.content)}</div>
+      <div class="comment-text">${comment.content}</div>
     </div>
   `;
 

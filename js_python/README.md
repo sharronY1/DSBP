@@ -250,6 +250,60 @@ uvicorn main:app --reload --log-level debug
 uvicorn main:app --reload > logs.txt 2>&1
 ```
 
+## 测试策略（Pytest）
+
+为了覆盖依赖图、鉴权、输入校验、数据库约束以及通知逻辑，推荐在 `tests/` 目录下按照 `tests/unit/` 与 `tests/integration/` 进行拆分：
+
+- `tests/unit/`：测试纯函数或轻量逻辑（如 cycle 检测、mention 解析、输入校验器）。
+- `tests/integration/`：使用 FastAPI TestClient + 临时数据库跑 API、权限与事务行为。
+- 关键 fixtures：
+  - `db_session`：为每个测试启动事务并在 teardown 中回滚，保证隔离。
+  - `client`：包装 TestClient，支持是否注入 JWT 的选项。
+  - `user_factory` / `project_factory` / `task_factory`：快速造项目、任务、依赖等基础数据。
+
+### 优先级 1：依赖图（Dependency Map）
+- **Cycle detection**：覆盖 2 节点互指、3+ 节点链路、self-loop、重复边。建议在 `tests/unit/test_dependency_graph.py` 中针对检测函数写入表驱动测试。
+- **Edge 增删**：`test_create_dependency_success_and_delete_restores_graph` 验证创建合法边成功、删除后仍能再次创建。
+- **跨项目禁止**：`test_dependency_cross_project_forbidden` 使用两个项目的任务，断言 API 返回 403/404。
+- **并发/事务**：`test_dependency_cycle_race_condition_rejects_one_request` 里可用两个并发客户端向同一项目提交互逆边，断言最终数据库无环且至少一个请求 409/400。
+
+### 优先级 2：权限 / 鉴权
+- **未登录访问**：`test_unauthenticated_requests_return_401` 参数化受保护的 endpoint。
+- **跨项目越权**：`test_horizontal_privilege_escalation_blocked` 构造 Project X/Y，对非成员访问任务、评论、依赖的 GET/PATCH/DELETE 断言 403 或 404。
+- **角色矩阵**：若存在 owner/admin/member/viewer，针对 `DELETE /tasks/{id}`、`PATCH /tasks/{id}`、依赖 CRUD、评论删除写矩阵测试。
+- **Token 失效**：`test_revoked_or_expired_token_returns_401_without_side_effects` 手动篡改或过期 token，请求应失败且数据库无新增记录。
+
+### 优先级 3：API 输入校验
+- `test_create_task_rejects_empty_or_oversized_title`
+- `test_patch_task_rejects_invalid_status_enum`
+- `test_create_task_rejects_invalid_date_format`
+- `test_dependency_rejects_mismatched_id_types`
+- `test_create_dependency_idempotent_on_duplicate_payload`（模拟重复 POST，不应生成重复边/通知）。
+
+### 优先级 4：数据库约束与一致性
+- `test_delete_project_cascades_tasks_dependencies_comments_notifications`
+- `test_dependency_unique_constraint_enforced`
+- `test_failed_transaction_rolls_back_partial_records`（例如依赖校验失败后任务表、活动表都不应新增记录）。
+
+### 优先级 5：通知与 @mentions
+- `test_comment_mention_creates_notification`：针对项目成员被 @，断言通知写入且只包含被提及用户。
+- `test_mention_parser_handles_duplicates_and_boundaries`：unit 测试解析函数，覆盖重复 @、标点、邮箱形式、@不存在的情况。
+- `test_notification_read_state_updates_correctly`：集成测试 `PATCH /notifications/{id}` 或批量标记接口。
+- `test_comment_xss_payload_is_escaped`：向评论 API 提交脚本标签，随后通过 Task Detail 或通知 API 获取内容，断言返回被转义（例如 `<script>` → `&lt;script&gt;`），确保后端在序列化阶段做 escaping 而不是直接原样输出。
+
+### 建议直接实现的测试函数一览
+```
+tests/integration/test_dependencies.py::test_create_dependency_rejects_cycle
+tests/integration/test_dependencies.py::test_create_dependency_rejects_self_loop
+tests/integration/test_dependencies.py::test_dependency_cross_project_forbidden
+tests/integration/test_tasks.py::test_task_status_transition_persists
+tests/integration/test_auth.py::test_unauthenticated_requests_return_401
+tests/integration/test_auth.py::test_horizontal_privilege_escalation_blocked
+tests/integration/test_notifications.py::test_comment_mention_creates_notification
+tests/integration/test_notifications.py::test_comment_xss_payload_is_escaped
+```
+上述列表可作为最小回归集合，后续再扩展更多矩阵和边界场景。
+
 ### 数据库检查
 ```bash
 # 使用 sqlite3

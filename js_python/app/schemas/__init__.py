@@ -1,7 +1,8 @@
 from datetime import datetime
+from html import escape
 from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer
 
 
 class UserCreate(BaseModel):
@@ -149,6 +150,10 @@ class CommentOut(BaseModel):
     replies: List["CommentOut"] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("content")
+    def sanitize_content(cls, value: str) -> str:
+        return escape(value or "")
 
 
 CommentOut.update_forward_refs()

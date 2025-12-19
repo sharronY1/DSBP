@@ -631,6 +631,12 @@ def create_task_dependency(
     dependent_task = ensure_task_access(dependency_in.dependent_task_id, db, current_user)
     depends_on_task = ensure_task_access(dependency_in.depends_on_task_id, db, current_user)
 
+    if dependent_task.project_id != depends_on_task.project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tasks must belong to the same project",
+        )
+
     if dependent_task.id == depends_on_task.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task cannot depend on itself")
 

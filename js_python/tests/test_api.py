@@ -1,58 +1,15 @@
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
 import app.api.routes as routes
-import app.models as models
 import app.schemas as schemas
 import app.services.auth as auth
-from app.core.database import Base
-
-TEST_DATABASE_URL = "sqlite://"
-engine = create_engine(
-    TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-@pytest.fixture(autouse=True)
-def db_session() -> Session:
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    session = TestingSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
-def _register_user(session: Session, username: str, email: str, password: str = "secret123") -> models.User:
-    user_in = schemas.UserCreate(username=username, email=email, password=password)
-    return routes.register(user_in, session)
-
-
-def _create_project(session: Session, owner: models.User, name: str = "Demo Project"):
-    project_in = schemas.ProjectCreate(name=name, description="", visibility="all", shared_usernames=[])
-    return routes.create_project(project_in, session, owner)
-
-
-def _create_task(session: Session, owner: models.User, project: models.Project, title: str):
-    task_in = schemas.TaskCreate(
-        title=title,
-        description="",
-        status="new_task",
-        project_id=project.id,
-        assignee_ids=[],
-    )
-    return routes.create_task(task_in, session, owner)
+from tests.factories import create_project, create_task, create_user
 
 
 def test_user_registration_creates_hashed_password(db_session: Session):
-    user = _register_user(db_session, "alice", "alice@example.com", password="secret123")
+    user = create_user(db_session, "alice", "alice@example.com", password="secret123")
     assert user.username == "alice"
     assert user.email == "alice@example.com"
     assert user.hashed_password != "secret123"
@@ -60,25 +17,25 @@ def test_user_registration_creates_hashed_password(db_session: Session):
 
 
 def test_user_registration_prevents_duplicate_usernames(db_session: Session):
-    _register_user(db_session, "bob", "bob@example.com")
+    create_user(db_session, "bob", "bob@example.com")
 
     with pytest.raises(HTTPException) as exc:
-        _register_user(db_session, "bob", "bob2@example.com")
+        create_user(db_session, "bob", "bob2@example.com")
     assert exc.value.status_code == 400
     assert exc.value.detail == "Username already registered"
 
 
 def test_user_registration_prevents_duplicate_emails(db_session: Session):
-    _register_user(db_session, "carol", "carol@example.com")
+    create_user(db_session, "carol", "carol@example.com")
 
     with pytest.raises(HTTPException) as exc:
-        _register_user(db_session, "carol2", "carol@example.com")
+        create_user(db_session, "carol2", "carol@example.com")
     assert exc.value.status_code == 400
     assert exc.value.detail == "Email already registered"
 
 
 def test_user_login_returns_bearer_token(db_session: Session):
-    _register_user(db_session, "dave", "dave@example.com", password="strongpass")
+    create_user(db_session, "dave", "dave@example.com", password="strongpass")
 
     token = routes.login(schemas.UserLogin(username="dave", password="strongpass"), db_session)
     assert token.access_token
@@ -86,7 +43,7 @@ def test_user_login_returns_bearer_token(db_session: Session):
 
 
 def test_user_login_rejects_invalid_password(db_session: Session):
-    _register_user(db_session, "erin", "erin@example.com", password="strongpass")
+    create_user(db_session, "erin", "erin@example.com", password="strongpass")
 
     with pytest.raises(HTTPException) as exc:
         routes.login(schemas.UserLogin(username="erin", password="wrong"), db_session)
@@ -95,7 +52,7 @@ def test_user_login_rejects_invalid_password(db_session: Session):
 
 
 def test_user_login_rejects_unknown_user(db_session: Session):
-    _register_user(db_session, "frank", "frank@example.com", password="strongpass")
+    create_user(db_session, "frank", "frank@example.com", password="strongpass")
 
     with pytest.raises(HTTPException) as exc:
         routes.login(schemas.UserLogin(username="ghost", password="whatever"), db_session)
@@ -104,12 +61,12 @@ def test_user_login_rejects_unknown_user(db_session: Session):
 
 
 def test_dependency_map_returns_chains_and_edges(db_session: Session):
-    owner = _register_user(db_session, "grace", "grace@example.com")
-    project = _create_project(db_session, owner, name="Backend")
+    owner = create_user(db_session, "grace", "grace@example.com")
+    project = create_project(db_session, owner, name="Backend")
 
-    task_setup = _create_task(db_session, owner, project, "Setup")
-    task_build = _create_task(db_session, owner, project, "Build")
-    task_test = _create_task(db_session, owner, project, "Test")
+    task_setup = create_task(db_session, owner, project, title="Setup")
+    task_build = create_task(db_session, owner, project, title="Build")
+    task_test = create_task(db_session, owner, project, title="Test")
 
     dep_inputs = [
         schemas.TaskDependencyCreate(depends_on_task_id=task_setup.id, dependent_task_id=task_build.id),
@@ -128,7 +85,7 @@ def test_dependency_map_returns_chains_and_edges(db_session: Session):
 
 
 def test_dependency_map_returns_empty_structure_when_user_has_no_tasks(db_session: Session):
-    owner = _register_user(db_session, "henry", "henry@example.com")
+    owner = create_user(db_session, "henry", "henry@example.com")
 
     dependency_map = routes.dependency_map(db_session, owner)
 
@@ -139,12 +96,12 @@ def test_dependency_map_returns_empty_structure_when_user_has_no_tasks(db_sessio
 
 
 def test_dependency_map_identifies_convergences(db_session: Session):
-    owner = _register_user(db_session, "irene", "irene@example.com")
-    project = _create_project(db_session, owner, name="Infra")
+    owner = create_user(db_session, "irene", "irene@example.com")
+    project = create_project(db_session, owner, name="Infra")
 
-    task_a = _create_task(db_session, owner, project, "Plan")
-    task_b = _create_task(db_session, owner, project, "Build")
-    task_c = _create_task(db_session, owner, project, "Review")
+    task_a = create_task(db_session, owner, project, title="Plan")
+    task_b = create_task(db_session, owner, project, title="Build")
+    task_c = create_task(db_session, owner, project, title="Review")
 
     dep_inputs = [
         schemas.TaskDependencyCreate(depends_on_task_id=task_a.id, dependent_task_id=task_c.id),
@@ -162,11 +119,11 @@ def test_dependency_map_identifies_convergences(db_session: Session):
 
 
 def test_notifications_created_from_mentions(db_session: Session):
-    owner = _register_user(db_session, "jack", "jack@example.com")
-    guest = _register_user(db_session, "kate", "kate@example.com")
+    owner = create_user(db_session, "jack", "jack@example.com")
+    guest = create_user(db_session, "kate", "kate@example.com")
 
-    project = _create_project(db_session, owner, name="Docs")
-    task = _create_task(db_session, owner, project, "Write docs")
+    project = create_project(db_session, owner, name="Docs")
+    task = create_task(db_session, owner, project, title="Write docs")
 
     comment_in = schemas.CommentCreate(task_id=task.id, content=f"Heads up @{guest.username}")
     routes.create_comment(comment_in, db_session, owner)
@@ -182,10 +139,10 @@ def test_notifications_created_from_mentions(db_session: Session):
 
 
 def test_notifications_ignore_self_mentions(db_session: Session):
-    owner = _register_user(db_session, "liam", "liam@example.com")
+    owner = create_user(db_session, "liam", "liam@example.com")
 
-    project = _create_project(db_session, owner, name="Website")
-    task = _create_task(db_session, owner, project, "Deploy")
+    project = create_project(db_session, owner, name="Website")
+    task = create_task(db_session, owner, project, title="Deploy")
 
     comment_in = schemas.CommentCreate(task_id=task.id, content="Reminder for @liam")
     routes.create_comment(comment_in, db_session, owner)
@@ -195,12 +152,12 @@ def test_notifications_ignore_self_mentions(db_session: Session):
 
 
 def test_mark_notification_read_restricted_to_recipient(db_session: Session):
-    owner = _register_user(db_session, "maria", "maria@example.com")
-    guest = _register_user(db_session, "nate", "nate@example.com")
-    outsider = _register_user(db_session, "oliver", "oliver@example.com")
+    owner = create_user(db_session, "maria", "maria@example.com")
+    guest = create_user(db_session, "nate", "nate@example.com")
+    outsider = create_user(db_session, "oliver", "oliver@example.com")
 
-    project = _create_project(db_session, owner, name="Handbook")
-    task = _create_task(db_session, owner, project, "Draft")
+    project = create_project(db_session, owner, name="Handbook")
+    task = create_task(db_session, owner, project, title="Draft")
 
     comment_in = schemas.CommentCreate(task_id=task.id, content="Ping @nate")
     routes.create_comment(comment_in, db_session, owner)
@@ -214,8 +171,8 @@ def test_mark_notification_read_restricted_to_recipient(db_session: Session):
 
 
 def test_project_private_visibility_ignores_shared_users(db_session: Session):
-    owner = _register_user(db_session, "paula", "paula@example.com")
-    guest = _register_user(db_session, "quentin", "quentin@example.com")
+    owner = create_user(db_session, "paula", "paula@example.com")
+    guest = create_user(db_session, "quentin", "quentin@example.com")
 
     project_in = schemas.ProjectCreate(
         name="Roadmap",
@@ -233,7 +190,7 @@ def test_project_private_visibility_ignores_shared_users(db_session: Session):
 
 
 def test_project_selected_visibility_requires_known_users(db_session: Session):
-    owner = _register_user(db_session, "rachel", "rachel@example.com")
+    owner = create_user(db_session, "rachel", "rachel@example.com")
 
     project_in = schemas.ProjectCreate(
         name="Playbook",
@@ -249,8 +206,8 @@ def test_project_selected_visibility_requires_known_users(db_session: Session):
 
 
 def test_project_visibility_update_clears_shared_users_when_opening_access(db_session: Session):
-    owner = _register_user(db_session, "sara", "sara@example.com")
-    guest = _register_user(db_session, "tom", "tom@example.com")
+    owner = create_user(db_session, "sara", "sara@example.com")
+    guest = create_user(db_session, "tom", "tom@example.com")
 
     project = routes.create_project(
         schemas.ProjectCreate(
