@@ -152,7 +152,7 @@ class CommentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     @field_serializer("content")
-    def sanitize_content(cls, value: str) -> str:
+    def sanitize_content(self, value: str) -> str:
         return escape(value or "")
 
 
