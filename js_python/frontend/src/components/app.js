@@ -1859,7 +1859,7 @@ function formatDateKey(date) {
 function formatFullDateLabel(dateKey) {
   const [year, month, day] = dateKey.split("-").map(Number);
   const date = new Date(year, month - 1, day);
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -1880,7 +1880,7 @@ function formatTimeLabel(isoString) {
     return "--:--";
   }
 
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function describeActivity(activity) {
@@ -1952,7 +1952,7 @@ function renderHistoryCalendar() {
     historyCalendarGrid.appendChild(dayEl);
   }
 
-  historyMonthLabel.textContent = historyMonthCursor.toLocaleDateString(undefined, {
+  historyMonthLabel.textContent = historyMonthCursor.toLocaleDateString("en-US", {
     month: "long",
     year: "numeric",
   });
@@ -2763,12 +2763,12 @@ function formatDate(date) {
   const diff = d - today;
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
 
-  if (days > 1 && days < 7) return d.toLocaleDateString(undefined, { weekday: 'long' });
+  if (days > 1 && days < 7) return d.toLocaleDateString("en-US", { weekday: 'long' });
   if (days > 0) return `in ${days} days`;
   if (days < -1) return `${Math.abs(days)} days ago`;
 
   // Default for past dates or far future
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function getTimeAgo(date) {
@@ -3622,7 +3622,7 @@ function renderNotifications() {
       <div class="notification-content">
         <p class="notification-message">${escapeHtml(notification.message)}</p>
         ${locationHtml}
-        <span class="notification-time">${new Date(notification.created_at).toLocaleString()}</span>
+        <span class="notification-time">${new Date(notification.created_at).toLocaleString("en-US")}</span>
       </div>
     `;
 
