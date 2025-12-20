@@ -1456,7 +1456,11 @@ let dependencyDataLoaded = false;
 let notifications = [];
 let notificationsLoaded = false;
 let dashboardMetrics = null;
-let historyMonthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+// Initialize historyMonthCursor to current month's first day
+let historyMonthCursor = (() => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+})();
 let historyActivitiesByDay = {};
 let historyDailyCounts = {};
 let selectedHistoryDate = null;
@@ -1896,7 +1900,8 @@ function describeActivity(activity) {
 function getFirstHistoryDateKey() {
   const keys = Object.keys(historyActivitiesByDay);
   if (keys.length === 0) {
-    return formatDateKey(new Date(historyMonthCursor));
+    // Return current date instead of first day of month
+    return formatDateKey(new Date());
   }
   return keys.sort().pop();
 }
@@ -1997,7 +2002,10 @@ async function loadHistoryForMonth(projectId) {
       historyActivitiesByDay[key].push(activity);
     });
     if (!selectedHistoryDate || !historyActivitiesByDay[selectedHistoryDate]) {
-      selectedHistoryDate = Object.keys(historyActivitiesByDay).length > 0 ? getFirstHistoryDateKey() : formatDateKey(new Date(historyMonthCursor));
+      // Default to current date instead of first day of month
+      const today = new Date();
+      const todayKey = formatDateKey(today);
+      selectedHistoryDate = Object.keys(historyActivitiesByDay).length > 0 ? getFirstHistoryDateKey() : todayKey;
     }
     renderHistoryCalendar();
     renderHistoryList();
@@ -2023,8 +2031,11 @@ async function selectProject(projectId) {
   await loadTasks(projectId);
   renderDashboardProjectInfo();
   populateProjectSettingsForm();
-  historyMonthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  selectedHistoryDate = null;
+  // Reset historyMonthCursor to current month's first day (for calendar display)
+  const now = new Date();
+  historyMonthCursor = new Date(now.getFullYear(), now.getMonth(), 1);
+  // Set selectedHistoryDate to current date instead of null
+  selectedHistoryDate = formatDateKey(now);
   historyActivitiesByDay = {};
   historyDailyCounts = {};
   renderHistoryCalendar();
