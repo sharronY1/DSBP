@@ -292,7 +292,7 @@ def update_project(
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    update_data = project_update.dict(exclude_unset=True)
+    update_data = project_update.model_dump(exclude_unset=True)
     shared_usernames = update_data.pop("shared_usernames", None)
 
     for field, value in update_data.items():
@@ -444,7 +444,7 @@ def update_task(
     task = ensure_task_access(task_id, db, current_user)
     
     original_status = task.status
-    update_data = task_update.dict(exclude_unset=True)
+    update_data = task_update.model_dump(exclude_unset=True)
     assignee_ids = update_data.pop("assignee_ids", None)
     
     for field, value in update_data.items():

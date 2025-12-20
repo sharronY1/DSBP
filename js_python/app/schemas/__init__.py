@@ -156,7 +156,7 @@ class CommentOut(BaseModel):
         return escape(value or "")
 
 
-CommentOut.update_forward_refs()
+CommentOut.model_rebuild()
 
 
 class NotificationOut(BaseModel):
