@@ -105,7 +105,7 @@ When assigning tasks or sharing projects:
 ## Project Structure
 
 ```
-js_python/
+DSBP/
 ├── main.py                 # FastAPI application entry point
 ├── app/                    # Backend application
 │   ├── api/
