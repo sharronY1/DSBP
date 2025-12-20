@@ -1913,6 +1913,10 @@ function renderHistoryCalendar() {
   const firstDay = new Date(historyMonthCursor.getFullYear(), historyMonthCursor.getMonth(), 1);
   const daysInMonth = new Date(historyMonthCursor.getFullYear(), historyMonthCursor.getMonth() + 1, 0).getDate();
   const startWeekday = firstDay.getDay();
+  
+  // Get today's date key for comparison
+  const today = new Date();
+  const todayKey = formatDateKey(today);
 
   for (let i = 0; i < startWeekday; i += 1) {
     const placeholder = document.createElement("div");
@@ -1927,6 +1931,11 @@ function renderHistoryCalendar() {
     dayEl.className = "calendar-day";
     dayEl.textContent = day;
 
+    // Check if this day is today and add "today" class
+    if (key === todayKey) {
+      dayEl.classList.add("today");
+    }
+    
     if (historyDailyCounts[key]) {
       dayEl.classList.add("has-activity");
     }

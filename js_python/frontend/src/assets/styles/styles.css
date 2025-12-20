@@ -1165,6 +1165,21 @@ body {
   color: white;
 }
 
+.calendar-day.today {
+  border: 2px solid #fbbf24 !important;
+  box-sizing: border-box;
+  outline: 2px solid #fbbf24;
+  outline-offset: -2px;
+}
+
+.calendar-day.today.selected {
+  border: 2px solid #fbbf24 !important;
+  outline: 2px solid #fbbf24 !important;
+  outline-offset: -2px;
+  background: #1e293b;
+  color: white;
+}
+
 .history-card {
   margin-top: 20px;
 }
