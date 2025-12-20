@@ -2051,8 +2051,9 @@ async function selectProject(projectId) {
   renderHistoryList();
   await refreshDashboardAnalytics();
   
-  // If taskboard is active, re-render it
+  // If taskboard is active, restore structure and re-render it
   if (taskboardView && !taskboardView.classList.contains("hidden")) {
+      restoreTaskBoardStructure();
       renderTaskBoard();
   }
 }
@@ -2067,8 +2068,52 @@ async function loadTasks(projectId) {
   }
 }
 
+// Restore Task Board Structure
+function restoreTaskBoardStructure() {
+  if (!taskboardView) return;
+  
+  // Check if structure exists
+  const firstContainer = taskboardView.querySelector('.tasks-container[data-status="new_task"]');
+  if (firstContainer) return; // Structure already exists
+  
+  // Restore the structure
+  taskboardView.innerHTML = `
+    <div class="board-column" data-status="new_task">
+      <div class="column-header">
+        <h3>New task</h3>
+        <span class="task-count" data-status="new_task">0</span>
+      </div>
+      <div class="tasks-container" data-status="new_task"></div>
+    </div>
+    <div class="board-column" data-status="scheduled">
+      <div class="column-header">
+        <h3>Scheduled</h3>
+        <span class="task-count" data-status="scheduled">0</span>
+      </div>
+      <div class="tasks-container" data-status="scheduled"></div>
+    </div>
+    <div class="board-column" data-status="in_progress">
+      <div class="column-header">
+        <h3>In progress</h3>
+        <span class="task-count" data-status="in_progress">0</span>
+      </div>
+      <div class="tasks-container" data-status="in_progress"></div>
+    </div>
+    <div class="board-column" data-status="completed">
+      <div class="column-header">
+        <h3>Completed</h3>
+        <span class="task-count" data-status="completed">0</span>
+      </div>
+      <div class="tasks-container" data-status="completed"></div>
+    </div>
+  `;
+}
+
 // Render Task Board
 function renderTaskBoard() {
+  // Ensure structure exists
+  restoreTaskBoardStructure();
+  
   const statuses = ["new_task", "scheduled", "in_progress", "completed"];
 
   statuses.forEach((status) => {
@@ -3747,8 +3792,29 @@ function showTabView(tabName) {
   if (tabName === "taskboard" && taskboardView) {
     taskboardView.classList.remove("hidden");
     if (!currentProject) {
-        taskboardView.innerHTML = '<p style="padding: 40px; text-align: center; color: #94a3b8;">Please select a project to see tasks.</p>'
+        // Use a placeholder element instead of overwriting the entire structure
+        const placeholder = taskboardView.querySelector('.taskboard-placeholder');
+        if (!placeholder) {
+          const placeholderEl = document.createElement('p');
+          placeholderEl.className = 'taskboard-placeholder';
+          placeholderEl.style.cssText = 'padding: 40px; text-align: center; color: #94a3b8; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%;';
+          placeholderEl.textContent = 'Please select a project to see tasks.';
+          taskboardView.appendChild(placeholderEl);
+        }
+        // Hide the board columns
+        const columns = taskboardView.querySelectorAll('.board-column');
+        columns.forEach(col => col.style.display = 'none');
     } else {
+        // Remove placeholder if exists
+        const placeholder = taskboardView.querySelector('.taskboard-placeholder');
+        if (placeholder) {
+          placeholder.remove();
+        }
+        // Show the board columns
+        const columns = taskboardView.querySelectorAll('.board-column');
+        columns.forEach(col => col.style.display = '');
+        // Ensure structure exists and render
+        restoreTaskBoardStructure();
         renderTaskBoard(); // Ensure board is rendered
     }
   } else if (tabName === "dashboard" && dashboardView) {

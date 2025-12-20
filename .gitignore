@@ -16,6 +16,7 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+.history/
 
 # Environment & secrets
 .env
