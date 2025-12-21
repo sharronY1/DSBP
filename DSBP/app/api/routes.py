@@ -795,8 +795,6 @@ def create_comment(
     task = comment.task
     project = task.project if task else None
     for user in mentioned_users:
-        if user.id == current_user.id:
-            continue
         # Only create notification if the mentioned user is a project member
         if project and not user_can_access_project(project, user):
             continue

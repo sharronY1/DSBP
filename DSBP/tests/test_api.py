@@ -148,8 +148,8 @@ def test_notifications_created_from_mentions(db_session: Session):
     assert updated.read is True
 
 
-def test_notifications_ignore_self_mentions(db_session: Session):
-    """TC-API-11: Notifications Ignore Self Mentions - User mentions themselves in comment."""
+def test_notifications_include_self_mentions(db_session: Session):
+    """TC-API-11: Notifications Include Self Mentions - User mentions themselves in comment."""
     owner = create_user(db_session, "liam", "liam@example.com")
 
     project = create_project(db_session, owner, name="Website")
@@ -159,7 +159,8 @@ def test_notifications_ignore_self_mentions(db_session: Session):
     routes.create_comment(comment_in, db_session, owner)
 
     notifications = routes.list_notifications(db_session, owner)
-    assert notifications == []
+    assert len(notifications) == 1
+    assert notifications[0].message.startswith(f"{owner.username} mentioned you")
 
 
 def test_mark_notification_read_restricted_to_recipient(db_session: Session):

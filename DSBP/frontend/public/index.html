@@ -13,7 +13,10 @@
       <div class="header-left">
         <div class="logo-container">
           <div class="logo-icon">D</div>
-          <span class="logo-text">DSBP</span>
+          <div class="logo-text-container">
+            <span class="logo-text">DSBP</span>
+            <span class="logo-subtitle">Digital Software Building Platform</span>
+          </div>
         </div>
         <div class="user-badge" id="user-badge-container">
           <span class="user-icon" id="current-user-icon">?</span> 
@@ -59,7 +62,10 @@
             <button class="tab active" data-tab="dashboard">Dashboard</button>
             <button class="tab" data-tab="taskboard">Task Board</button>
             <button class="tab" data-tab="dependency">Dependency Map</button>
-            <button class="tab" data-tab="notifications">Notifications</button>
+            <button class="tab" data-tab="notifications" id="notifications-tab">
+              Notifications
+              <span id="notification-badge" class="notification-badge hidden"></span>
+            </button>
           </nav>
           <div class="header-actions">
             <button id="btn-add-task" class="btn-add-task">
@@ -346,6 +352,10 @@
           </div>
           <div id="comments-list" class="comments-list">
             </div>
+          <div class="comment-tip">
+            <span class="comment-tip-icon">💡</span>
+            <span class="comment-tip-text">Tip: Use @username to mention and notify users</span>
+          </div>
           <form id="form-add-comment" class="comment-form">
             <div class="comment-input-wrapper">
               <input type="text" placeholder="Add Comment" id="comment-input" autocomplete="off" />

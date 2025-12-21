@@ -1620,6 +1620,9 @@ async function initializeApp() {
 
     await loadProjects();
 
+    // Load notifications to update badge
+    await loadNotifications();
+
     // Determine initial tab from URL hash
     const initialTab = getTabFromLocation();
     showTabView(initialTab);
@@ -3767,17 +3770,20 @@ async function deleteDependencyLink(dependencyId) {
 async function loadNotifications(force = false) {
   if (notificationsLoaded && !force) {
     renderNotifications();
+    updateNotificationBadge();
     return;
   }
   try {
     notifications = await apiRequest("/notifications");
     notificationsLoaded = true;
     renderNotifications();
+    updateNotificationBadge();
   } catch (error) {
     notificationsLoaded = false;
     if (notificationsList) {
       notificationsList.innerHTML = `<li class="notification-item">${escapeHtml(error.message)}</li>`;
     }
+    updateNotificationBadge();
   }
 }
 
@@ -3924,6 +3930,21 @@ function renderNotifications() {
 
     notificationsList.appendChild(item);
   });
+  
+  // Update notification badge
+  updateNotificationBadge();
+}
+
+function updateNotificationBadge() {
+  const badge = document.getElementById("notification-badge");
+  if (!badge) return;
+  
+  const unreadCount = notifications ? notifications.filter(n => !n.read).length : 0;
+  if (unreadCount > 0) {
+    badge.classList.remove("hidden");
+  } else {
+    badge.classList.add("hidden");
+  }
 }
 
 async function markNotificationRead(notificationId) {
@@ -3933,6 +3954,7 @@ async function markNotificationRead(notificationId) {
     });
     notifications = notifications.map((n) => (n.id === notificationId ? updated : n));
     renderNotifications();
+    updateNotificationBadge();
   } catch (error) {
     alert("Failed to update notification: " + error.message);
   }
