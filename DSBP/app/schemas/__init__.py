@@ -57,9 +57,9 @@ class ProjectOut(ProjectBase):
 
 
 class TaskBase(BaseModel):
-    title: str
+    title: str = Field(..., min_length=1, max_length=150)
     description: Optional[str] = ""
-    status: str = "new_task"
+    status: Literal["new_task", "scheduled", "in_progress", "completed"] = "new_task"
 
 
 class TaskCreate(TaskBase):
@@ -69,9 +69,9 @@ class TaskCreate(TaskBase):
 
 
 class TaskUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=150)
     description: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[Literal["new_task", "scheduled", "in_progress", "completed"]] = None
     due_date: Optional[datetime] = None
     assignee_ids: Optional[List[int]] = None
 
