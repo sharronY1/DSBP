@@ -154,6 +154,14 @@ class CommentOut(BaseModel):
     @field_serializer("content")
     def sanitize_content(self, value: str) -> str:
         return escape(value or "")
+    
+    @field_serializer("created_at")
+    def serialize_created_at(self, value: datetime) -> str:
+        """Ensure datetime is returned as UTC ISO format with 'Z' suffix"""
+        if value.tzinfo is None:
+            # Treat naive datetime as UTC
+            return value.isoformat() + "Z"
+        return value.isoformat()
 
 
 CommentOut.model_rebuild()

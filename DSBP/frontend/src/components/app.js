@@ -2315,7 +2315,7 @@ function createCommentElement(comment) {
   const div = document.createElement("div");
   div.className = "comment-item";
 
-  const timeAgo = getTimeAgo(new Date(comment.created_at));
+  const absoluteTime = formatAbsoluteDateTime(comment.created_at);
 
   div.innerHTML = `
     <div class="comment-avatar color-${comment.author.id % 8}">
@@ -2324,7 +2324,7 @@ function createCommentElement(comment) {
     <div class="comment-content">
       <div class="comment-meta">
         <span class="comment-author">${escapeHtml(comment.author.username)}</span>
-        <span class="comment-time">${timeAgo}</span>
+        <span class="comment-time">${absoluteTime}</span>
       </div>
       <div class="comment-text">${comment.content}</div>
     </div>
@@ -2837,6 +2837,38 @@ function getTimeAgo(date) {
   if (interval > 1) return Math.floor(interval) + " minutes ago";
 
   return "just now";
+}
+
+// Format absolute datetime for display in Hong Kong timezone (UTC+8)
+function formatAbsoluteDateTime(dateString) {
+  if (!dateString) return "--";
+  
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+  
+  // Convert to Hong Kong timezone (Asia/Hong_Kong)
+  const options = {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  };
+  
+  const formatter = new Intl.DateTimeFormat('zh-CN', options);
+  const parts = formatter.formatToParts(date);
+  
+  const dateParts = {};
+  parts.forEach(part => {
+    dateParts[part.type] = part.value;
+  });
+  
+  // Format: YYYY-MM-DD HH:MM
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day} ${dateParts.hour}:${dateParts.minute}`;
 }
 
 // License management
