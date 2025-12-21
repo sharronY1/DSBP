@@ -16,7 +16,7 @@ def auth_headers(db_session, username: str, password: str = "secret123") -> Dict
 
 
 def test_dashboard_project_overview_displays_correct_info(api_client, db_session):
-    """test case1: Project Overview displays correct project information (name, description, visibility, owner)"""
+    """TC-DASH-01: Project Overview Displays Correct Info - Project exists with all fields."""
     owner = create_user(db_session, "dashboard_owner", "dashboard_owner@example.com")
     project = create_project(
         db_session,
@@ -46,7 +46,7 @@ def test_dashboard_project_overview_displays_correct_info(api_client, db_session
 
 
 def test_dashboard_project_overview_displays_all_visibility_types(api_client, db_session):
-    """test case: Project Overview displays all visibility types correctly"""
+    """TC-DASH-02: Project Overview Displays All Visibility Types - Projects with different visibility exist."""
     owner = create_user(db_session, "visibility_owner", "visibility_owner@example.com")
     
     # Create projects with different visibility settings
@@ -69,7 +69,7 @@ def test_dashboard_project_overview_displays_all_visibility_types(api_client, db
 
 
 def test_dashboard_task_status_overview_counts_tasks_correctly(api_client, db_session):
-    """test case: Task Status Overview counts tasks correctly by status"""
+    """TC-DASH-03: Task Status Overview Counts Tasks Correctly - Project has tasks with different statuses."""
     owner = create_user(db_session, "status_owner", "status_owner@example.com")
     project = create_project(db_session, owner, name="Status Project")
     
@@ -103,7 +103,7 @@ def test_dashboard_task_status_overview_counts_tasks_correctly(api_client, db_se
 
 
 def test_dashboard_task_status_overview_empty_project(api_client, db_session):
-    """test case: Task Status Overview returns zero counts for empty project"""
+    """TC-DASH-04: Task Status Overview Empty Project - Project exists with no tasks."""
     owner = create_user(db_session, "empty_dash", "empty_dash@example.com")
     project = create_project(db_session, owner, name="Empty Dashboard Project")
     
@@ -120,7 +120,7 @@ def test_dashboard_task_status_overview_empty_project(api_client, db_session):
 
 
 def test_dashboard_task_status_overview_updates_after_status_change(api_client, db_session):
-    """test case: Task Status Overview updates correctly after task status changes"""
+    """TC-DASH-05: Task Status Overview Updates After Status Change - Task exists with initial status."""
     owner = create_user(db_session, "update_dash", "update_dash@example.com")
     project = create_project(db_session, owner, name="Update Dashboard Project")
     task = create_task(db_session, owner, project, title="Status Change Task", status="new_task")
@@ -155,7 +155,7 @@ def test_dashboard_task_status_overview_updates_after_status_change(api_client, 
 
 
 def test_dashboard_task_history_returns_activities(api_client, db_session):
-    """test case: Task History Management returns task activities"""
+    """TC-DASH-06: Task History Returns Activities - Project has tasks with activity history."""
     owner = create_user(db_session, "history_owner", "history_owner@example.com")
     project = create_project(db_session, owner, name="History Project")
     
@@ -182,7 +182,7 @@ def test_dashboard_task_history_returns_activities(api_client, db_session):
 
 
 def test_dashboard_task_history_daily_counts_are_correct(api_client, db_session):
-    """test case: Task History daily counts are calculated correctly"""
+    """TC-DASH-07: Task History Daily Counts Are Correct - Project has multiple tasks created."""
     owner = create_user(db_session, "counts_owner", "counts_owner@example.com")
     project = create_project(db_session, owner, name="Counts Project")
     
@@ -207,7 +207,7 @@ def test_dashboard_task_history_daily_counts_are_correct(api_client, db_session)
 
 
 def test_dashboard_task_history_filters_by_date_range(api_client, db_session):
-    """test case: Task History filters activities by date range"""
+    """TC-DASH-08: Task History Filters by Date Range - Project has tasks with activity history."""
     from datetime import date
     
     owner = create_user(db_session, "filter_owner", "filter_owner@example.com")
@@ -238,7 +238,7 @@ def test_dashboard_task_history_filters_by_date_range(api_client, db_session):
 
 
 def test_dashboard_project_overview_owner_display(api_client, db_session):
-    """test case: Project Overview displays correct owner information"""
+    """TC-DASH-09: Project Overview Owner Display - Multiple projects with different owners exist."""
     owner1 = create_user(db_session, "owner1", "owner1@example.com")
     owner2 = create_user(db_session, "owner2", "owner2@example.com")
     
@@ -270,7 +270,7 @@ def test_dashboard_project_overview_owner_display(api_client, db_session):
 
 
 def test_dashboard_project_overview_description_display(api_client, db_session):
-    """test case: Project Overview displays description correctly (including empty description)"""
+    """TC-DASH-10: Project Overview Description Display - Projects with and without descriptions exist."""
     owner = create_user(db_session, "desc_owner", "desc_owner@example.com")
     
     # Project with description

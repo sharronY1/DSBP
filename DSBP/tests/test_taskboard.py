@@ -16,7 +16,7 @@ def auth_headers(db_session, username: str, password: str = "secret123") -> Dict
 
 
 def test_task_list_returns_all_tasks_for_project(api_client, db_session):
-    """test case1: task list returns all tasks for project"""
+    """TC-TASK-02: Task List Returns All Tasks for Project - Project exists with multiple tasks."""
     owner = create_user(db_session, "taskboard", "taskboard@example.com")
     project = create_project(db_session, owner, name="TaskBoard Project")
     
@@ -43,7 +43,7 @@ def test_task_list_returns_all_tasks_for_project(api_client, db_session):
 
 
 def test_task_list_can_be_filtered_by_status(api_client, db_session):
-    """test case2: task list can be filtered by status"""
+    """TC-TASK-03: Task List Can Be Filtered by Status - Project has tasks with different statuses."""
     owner = create_user(db_session, "filter", "filter@example.com")
     project = create_project(db_session, owner, name="Filter Project")
     
@@ -88,7 +88,7 @@ def test_task_list_can_be_filtered_by_status(api_client, db_session):
 
 
 def test_task_list_isolates_tasks_by_project(api_client, db_session):
-    """test case3: task list isolates tasks by project"""
+    """TC-TASK-04: Task List Isolates Tasks by Project - Multiple projects exist with tasks."""
     owner = create_user(db_session, "multi", "multi@example.com")
     project_a = create_project(db_session, owner, name="Project A")
     project_b = create_project(db_session, owner, name="Project B")
@@ -131,7 +131,7 @@ def test_task_list_isolates_tasks_by_project(api_client, db_session):
 
 
 def test_task_status_update_reflects_in_list(api_client, db_session):
-    """test case4: task status update reflects in list"""
+    """TC-TASK-05: Task Status Update Reflects in List - Task exists with initial status."""
     owner = create_user(db_session, "update", "update@example.com")
     project = create_project(db_session, owner, name="Update Project")
     task = create_task(db_session, owner, project, title="Update Test", status="new_task")
@@ -191,7 +191,7 @@ def test_task_status_update_reflects_in_list(api_client, db_session):
 
 
 def test_task_list_empty_project_returns_empty_list(api_client, db_session):
-    """test case5: empty project returns empty task list"""
+    """TC-TASK-06: Empty Project Returns Empty Task List - Project exists with no tasks."""
     owner = create_user(db_session, "empty", "empty@example.com")
     project = create_project(db_session, owner, name="Empty Project")
     
@@ -203,3 +203,136 @@ def test_task_list_empty_project_returns_empty_list(api_client, db_session):
     tasks = response.json()
     assert len(tasks) == 0
     assert tasks == []
+
+
+def test_create_project_and_add_task(api_client, db_session):
+    """TC-PT-01: Create Project and Add Task - User is logged in."""
+    from datetime import date
+    
+    owner = create_user(db_session, "creator", "creator@example.com")
+    
+    # Create a project
+    project_response = api_client.post(
+        "/projects",
+        json={
+            "name": "New Project",
+            "description": "Test project creation",
+            "visibility": "private",
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert project_response.status_code == 201
+    project_data = project_response.json()
+    project_id = project_data["id"]
+    
+    # Verify project appears in list
+    projects_response = api_client.get(
+        "/projects",
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert projects_response.status_code == 200
+    projects = projects_response.json()
+    assert any(p["id"] == project_id for p in projects)
+    
+    # Add a task with title, assignee, and due date
+    assignee = create_user(db_session, "assignee", "assignee@example.com")
+    due_date = date.today()
+    
+    task_response = api_client.post(
+        "/tasks",
+        json={
+            "project_id": project_id,
+            "title": "New Task",
+            "description": "Task description",
+            "status": "new_task",
+            "due_date": due_date.isoformat(),
+            "assignee_ids": [assignee.id],
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert task_response.status_code == 201
+    task_data = task_response.json()
+    assert task_data["title"] == "New Task"
+    assert task_data["project_id"] == project_id
+    # Compare only date part (YYYY-MM-DD), ignoring time component
+    returned_due_date = task_data["due_date"]
+    if "T" in returned_due_date:
+        returned_due_date = returned_due_date.split("T")[0]
+    assert returned_due_date == due_date.isoformat()
+    assert len(task_data["assignees"]) == 1
+    assert task_data["assignees"][0]["id"] == assignee.id
+    
+    # Verify task appears in project task list
+    tasks_response = api_client.get(
+        f"/projects/{project_id}/tasks",
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert tasks_response.status_code == 200
+    tasks = tasks_response.json()
+    assert any(t["id"] == task_data["id"] for t in tasks)
+
+
+def test_reject_invalid_task_payload(api_client, db_session):
+    """TC-PT-03: Reject Invalid Task Payload - User is logged in."""
+    from datetime import date
+    
+    owner = create_user(db_session, "validator", "validator@example.com")
+    project = create_project(db_session, owner, name="Validation Project")
+    
+    # Test empty title
+    response = api_client.post(
+        "/tasks",
+        json={
+            "project_id": project.id,
+            "title": "",  # Empty title
+            "status": "new_task",
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response.status_code == 422  # Validation error
+    
+    # Test invalid due date format
+    response = api_client.post(
+        "/tasks",
+        json={
+            "project_id": project.id,
+            "title": "Valid Title",
+            "status": "new_task",
+            "due_date": "invalid-date-format",  # Invalid format
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response.status_code == 422  # Validation error
+    
+    # Test invalid status
+    response = api_client.post(
+        "/tasks",
+        json={
+            "project_id": project.id,
+            "title": "Valid Title",
+            "status": "invalid_status",  # Invalid status
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response.status_code == 422  # Validation error
+    
+    # Test non-existent project_id
+    response = api_client.post(
+        "/tasks",
+        json={
+            "project_id": 99999,  # Non-existent project
+            "title": "Valid Title",
+            "status": "new_task",
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response.status_code in [404, 403]  # Not found or forbidden
+    
+    # Verify no partial records were created
+    tasks_response = api_client.get(
+        f"/projects/{project.id}/tasks",
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert tasks_response.status_code == 200
+    tasks = tasks_response.json()
+    assert len(tasks) == 0  # No tasks should have been created

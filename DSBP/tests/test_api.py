@@ -9,6 +9,7 @@ from tests.factories import create_project, create_task, create_user
 
 
 def test_user_registration_creates_hashed_password(db_session: Session):
+    """TC-API-01: User Registration Creates Hashed Password - User registration data provided."""
     user = create_user(db_session, "alice", "alice@example.com", password="secret123")
     assert user.username == "alice"
     assert user.email == "alice@example.com"
@@ -17,6 +18,7 @@ def test_user_registration_creates_hashed_password(db_session: Session):
 
 
 def test_user_registration_prevents_duplicate_usernames(db_session: Session):
+    """TC-API-02: User Registration Prevents Duplicate Usernames - User with username exists."""
     create_user(db_session, "bob", "bob@example.com")
 
     with pytest.raises(HTTPException) as exc:
@@ -26,6 +28,7 @@ def test_user_registration_prevents_duplicate_usernames(db_session: Session):
 
 
 def test_user_registration_prevents_duplicate_emails(db_session: Session):
+    """TC-API-03: User Registration Prevents Duplicate Emails - User with email exists."""
     create_user(db_session, "carol", "carol@example.com")
 
     with pytest.raises(HTTPException) as exc:
@@ -35,6 +38,7 @@ def test_user_registration_prevents_duplicate_emails(db_session: Session):
 
 
 def test_user_login_returns_bearer_token(db_session: Session):
+    """TC-API-04: User Login Returns Bearer Token - Valid user credentials provided."""
     create_user(db_session, "dave", "dave@example.com", password="strongpass")
 
     token = routes.login(schemas.UserLogin(username="dave", password="strongpass"), db_session)
@@ -43,6 +47,7 @@ def test_user_login_returns_bearer_token(db_session: Session):
 
 
 def test_user_login_rejects_invalid_password(db_session: Session):
+    """TC-API-05: User Login Rejects Invalid Password - User exists with different password."""
     create_user(db_session, "erin", "erin@example.com", password="strongpass")
 
     with pytest.raises(HTTPException) as exc:
@@ -52,6 +57,7 @@ def test_user_login_rejects_invalid_password(db_session: Session):
 
 
 def test_user_login_rejects_unknown_user(db_session: Session):
+    """TC-API-06: User Login Rejects Unknown User - User does not exist."""
     create_user(db_session, "frank", "frank@example.com", password="strongpass")
 
     with pytest.raises(HTTPException) as exc:
@@ -61,6 +67,7 @@ def test_user_login_rejects_unknown_user(db_session: Session):
 
 
 def test_dependency_map_returns_chains_and_edges(db_session: Session):
+    """TC-API-07: Dependency Map Returns Chains and Edges - Tasks with dependencies exist."""
     owner = create_user(db_session, "grace", "grace@example.com")
     project = create_project(db_session, owner, name="Backend")
 
@@ -85,6 +92,7 @@ def test_dependency_map_returns_chains_and_edges(db_session: Session):
 
 
 def test_dependency_map_returns_empty_structure_when_user_has_no_tasks(db_session: Session):
+    """TC-API-08: Dependency Map Returns Empty Structure - User has no tasks."""
     owner = create_user(db_session, "henry", "henry@example.com")
 
     dependency_map = routes.dependency_map(db_session, owner)
@@ -96,6 +104,7 @@ def test_dependency_map_returns_empty_structure_when_user_has_no_tasks(db_sessio
 
 
 def test_dependency_map_identifies_convergences(db_session: Session):
+    """TC-API-09: Dependency Map Identifies Convergences - Tasks with converging dependencies exist."""
     owner = create_user(db_session, "irene", "irene@example.com")
     project = create_project(db_session, owner, name="Infra")
 
@@ -119,6 +128,7 @@ def test_dependency_map_identifies_convergences(db_session: Session):
 
 
 def test_notifications_created_from_mentions(db_session: Session):
+    """TC-API-10: Notifications Created From Mentions - Comment with mention is created."""
     owner = create_user(db_session, "jack", "jack@example.com")
     guest = create_user(db_session, "kate", "kate@example.com")
 
@@ -139,6 +149,7 @@ def test_notifications_created_from_mentions(db_session: Session):
 
 
 def test_notifications_ignore_self_mentions(db_session: Session):
+    """TC-API-11: Notifications Ignore Self Mentions - User mentions themselves in comment."""
     owner = create_user(db_session, "liam", "liam@example.com")
 
     project = create_project(db_session, owner, name="Website")
@@ -152,6 +163,7 @@ def test_notifications_ignore_self_mentions(db_session: Session):
 
 
 def test_mark_notification_read_restricted_to_recipient(db_session: Session):
+    """TC-API-12: Mark Notification Read Restricted to Recipient - Notification exists for different user."""
     owner = create_user(db_session, "maria", "maria@example.com")
     guest = create_user(db_session, "nate", "nate@example.com")
     outsider = create_user(db_session, "oliver", "oliver@example.com")
@@ -171,6 +183,7 @@ def test_mark_notification_read_restricted_to_recipient(db_session: Session):
 
 
 def test_project_private_visibility_ignores_shared_users(db_session: Session):
+    """TC-API-13: Project Private Visibility Ignores Shared Users - Project created with private visibility and shared users."""
     owner = create_user(db_session, "paula", "paula@example.com")
     guest = create_user(db_session, "quentin", "quentin@example.com")
 
@@ -190,6 +203,7 @@ def test_project_private_visibility_ignores_shared_users(db_session: Session):
 
 
 def test_project_selected_visibility_requires_known_users(db_session: Session):
+    """TC-API-14: Project Selected Visibility Requires Known Users - Project created with unknown shared users."""
     owner = create_user(db_session, "rachel", "rachel@example.com")
 
     project_in = schemas.ProjectCreate(
@@ -206,6 +220,7 @@ def test_project_selected_visibility_requires_known_users(db_session: Session):
 
 
 def test_project_visibility_update_clears_shared_users_when_opening_access(db_session: Session):
+    """TC-API-15: Project Visibility Update Clears Shared Users - Project with selected visibility and shared users exists."""
     owner = create_user(db_session, "sara", "sara@example.com")
     guest = create_user(db_session, "tom", "tom@example.com")
 

@@ -17,7 +17,7 @@ def auth_headers(db_session, username: str, password: str = "secret123") -> Dict
 
 
 def test_dependency_map_only_includes_accessible_projects(api_client, db_session):
-    """test case: Dependency map only includes tasks from projects accessible to user"""
+    """TC-MAP-01: Dependency Map Only Includes Accessible Projects - Multiple projects with different visibility exist."""
     owner = create_user(db_session, "map_owner", "map_owner@example.com")
     guest = create_user(db_session, "map_guest", "map_guest@example.com")
     
@@ -49,7 +49,7 @@ def test_dependency_map_only_includes_accessible_projects(api_client, db_session
 
 
 def test_dependency_map_includes_multiple_projects(api_client, db_session):
-    """test case: Dependency map includes dependencies from multiple accessible projects"""
+    """TC-MAP-02: Dependency Map Includes Multiple Projects - User has access to multiple projects with dependencies."""
     owner = create_user(db_session, "multi_map", "multi_map@example.com")
     
     # Project A
@@ -84,7 +84,7 @@ def test_dependency_map_includes_multiple_projects(api_client, db_session):
 
 
 def test_dependency_map_edges_have_correct_structure(api_client, db_session):
-    """test case: Dependency map edges have correct depends_on and dependent structure"""
+    """TC-MAP-03: Dependency Map Edges Have Correct Structure - Dependency exists between tasks."""
     owner = create_user(db_session, "edge_owner", "edge_owner@example.com")
     project = create_project(db_session, owner, name="Edge Project")
     
@@ -120,7 +120,7 @@ def test_dependency_map_edges_have_correct_structure(api_client, db_session):
 
 
 def test_dependency_map_updates_after_deletion(api_client, db_session):
-    """test case: Dependency map updates correctly after dependency deletion"""
+    """TC-MAP-04: Dependency Map Updates After Deletion - Dependency exists between tasks."""
     owner = create_user(db_session, "delete_map", "delete_map@example.com")
     project = create_project(db_session, owner, name="Delete Project")
     
@@ -166,7 +166,7 @@ def test_dependency_map_updates_after_deletion(api_client, db_session):
 
 
 def test_dependency_map_shared_project_includes_dependencies(api_client, db_session):
-    """test case: Dependency map includes dependencies from shared projects"""
+    """TC-MAP-05: Dependency Map Shared Project Includes Dependencies - Project is shared with user."""
     owner = create_user(db_session, "share_owner", "share_owner@example.com")
     guest = create_user(db_session, "share_guest", "share_guest@example.com")
     

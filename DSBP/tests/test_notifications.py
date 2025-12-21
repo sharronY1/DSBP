@@ -16,7 +16,7 @@ def auth_headers(db_session, username: str, password: str = "secret123") -> Dict
 
 
 def test_notifications_multiple_mentions_create_multiple_notifications(api_client, db_session):
-    """test case: Multiple mentions in comment create multiple notifications"""
+    """TC-NOTIF-01: Multiple Mentions Create Multiple Notifications - Comment contains multiple user mentions."""
     owner = create_user(db_session, "multi_notif", "multi_notif@example.com")
     user1 = create_user(db_session, "user1", "user1@example.com")
     user2 = create_user(db_session, "user2", "user2@example.com")
@@ -57,7 +57,7 @@ def test_notifications_multiple_mentions_create_multiple_notifications(api_clien
 
 
 def test_notifications_ordered_by_created_at_desc(api_client, db_session):
-    """test case: Notifications are ordered by created_at in descending order"""
+    """TC-NOTIF-02: Notifications Ordered by Created At Desc - Multiple notifications exist."""
     owner = create_user(db_session, "order_owner", "order_owner@example.com")
     user = create_user(db_session, "order_user", "order_user@example.com")
     
@@ -93,7 +93,7 @@ def test_notifications_ordered_by_created_at_desc(api_client, db_session):
 
 
 def test_notifications_mark_read_updates_status(api_client, db_session):
-    """test case: Marking notification as read updates its read status"""
+    """TC-NOTIF-03: Mark Read Updates Status - Unread notification exists."""
     owner = create_user(db_session, "read_owner", "read_owner@example.com")
     user = create_user(db_session, "read_user", "read_user@example.com")
     
@@ -137,7 +137,7 @@ def test_notifications_mark_read_updates_status(api_client, db_session):
 
 
 def test_notifications_include_project_and_task_names(api_client, db_session):
-    """test case: Notification message includes project and task names"""
+    """TC-NOTIF-04: Notification Includes Project and Task Names - Notification exists."""
     owner = create_user(db_session, "name_owner", "name_owner@example.com")
     user = create_user(db_session, "name_user", "name_user@example.com")
     
@@ -167,7 +167,7 @@ def test_notifications_include_project_and_task_names(api_client, db_session):
 
 
 def test_notifications_unread_and_read_separation(api_client, db_session):
-    """test case: Unread and read notifications are properly separated"""
+    """TC-NOTIF-05: Unread and Read Notifications Separation - Multiple notifications exist."""
     owner = create_user(db_session, "sep_owner", "sep_owner@example.com")
     user = create_user(db_session, "sep_user", "sep_user@example.com")
     
@@ -223,7 +223,7 @@ def test_notifications_unread_and_read_separation(api_client, db_session):
 
 
 def test_notifications_mark_read_returns_404_for_nonexistent(api_client, db_session):
-    """test case: Marking non-existent notification as read returns 404"""
+    """TC-NOTIF-06: Mark Read Returns 404 for Non-existent - Notification ID does not exist."""
     owner = create_user(db_session, "404_owner", "404_owner@example.com")
     
     response = api_client.post(
@@ -232,3 +232,118 @@ def test_notifications_mark_read_returns_404_for_nonexistent(api_client, db_sess
     )
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+
+def test_deduplicate_mention_notifications(api_client, db_session):
+    """TC-COM-02: Deduplicate Mention Notifications - Task exists; target user is a project member."""
+    owner = create_user(db_session, "dedup_owner", "dedup_owner@example.com")
+    user = create_user(db_session, "dedup_user", "dedup_user@example.com")
+    
+    project = create_project(
+        db_session,
+        owner,
+        name="Dedup Project",
+        visibility="selected",
+        shared_usernames=[user.username],
+    )
+    task = create_task(db_session, owner, project, title="Dedup Task")
+    
+    # Post comment mentioning user twice in the same comment
+    response = api_client.post(
+        "/comments",
+        json={
+            "task_id": task.id,
+            "content": f"Hey @{user.username}, please check this. Also @{user.username}, don't forget!",
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response.status_code == 201
+    
+    # Check notifications - should only create one notification per comment
+    notif_response = api_client.get(
+        "/notifications",
+        headers=auth_headers(db_session, user.username),
+    )
+    assert notif_response.status_code == 200
+    notifications = notif_response.json()
+    # Should only have one notification even though user was mentioned twice
+    assert len(notifications) == 1
+    assert "mentioned you" in notifications[0]["message"]
+    
+    # Post another comment with the same mention (simulating retry scenario)
+    response2 = api_client.post(
+        "/comments",
+        json={
+            "task_id": task.id,
+            "content": f"Reminder @{user.username}",
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response2.status_code == 201
+    
+    # Now should have 2 notifications (one per comment)
+    notif_response2 = api_client.get(
+        "/notifications",
+        headers=auth_headers(db_session, user.username),
+    )
+    assert notif_response2.status_code == 200
+    notifications2 = notif_response2.json()
+    assert len(notifications2) == 2
+
+
+def test_prevent_mention_of_non_member(api_client, db_session):
+    """TC-COM-03: Prevent Mention of Non-member - Task exists; target username is not a project member."""
+    owner = create_user(db_session, "nonmem_owner", "nonmem_owner@example.com")
+    member = create_user(db_session, "member", "member@example.com")
+    non_member = create_user(db_session, "nonmember", "nonmember@example.com")
+    
+    # Create project with only member, not non_member
+    project = create_project(
+        db_session,
+        owner,
+        name="Member Project",
+        visibility="selected",
+        shared_usernames=[member.username],  # Only member is shared
+    )
+    task = create_task(db_session, owner, project, title="Member Task")
+    
+    # Post comment mentioning non-member
+    response = api_client.post(
+        "/comments",
+        json={
+            "task_id": task.id,
+            "content": f"Hey @{non_member.username}, you shouldn't see this",
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response.status_code == 201  # Comment is created
+    
+    # Check non-member's notifications - should not have notification
+    notif_response = api_client.get(
+        "/notifications",
+        headers=auth_headers(db_session, non_member.username),
+    )
+    assert notif_response.status_code == 200
+    notifications = notif_response.json()
+    # Non-member should not receive notification
+    assert len(notifications) == 0
+    
+    # Verify member can still receive notifications
+    response2 = api_client.post(
+        "/comments",
+        json={
+            "task_id": task.id,
+            "content": f"Hey @{member.username}, you should see this",
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response2.status_code == 201
+    
+    member_notif_response = api_client.get(
+        "/notifications",
+        headers=auth_headers(db_session, member.username),
+    )
+    assert member_notif_response.status_code == 200
+    member_notifications = member_notif_response.json()
+    assert len(member_notifications) == 1
+    assert "mentioned you" in member_notifications[0]["message"]

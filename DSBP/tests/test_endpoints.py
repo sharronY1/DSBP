@@ -19,7 +19,49 @@ def auth_headers(db_session, username: str, password: str = "secret123") -> Dict
     return {"Authorization": f"Bearer {token}"}
 
 
+def test_prevent_cyclic_dependencies_2_node(api_client, db_session):
+    """TC-DEP-01: Prevent Cyclic Dependencies (2-node) - Two tasks A and B exist in the same project."""
+    owner = create_user(db_session, "cycle2", "cycle2@example.com")
+    project = create_project(db_session, owner, name="2-Node Cycle")
+
+    task_a = create_task(db_session, owner, project, title="Task A")
+    task_b = create_task(db_session, owner, project, title="Task B")
+
+    # Add A depends on B
+    response1 = api_client.post(
+        "/task-dependencies",
+        json={
+            "depends_on_task_id": task_a.id,
+            "dependent_task_id": task_b.id,
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response1.status_code == 201
+
+    # Attempt to add B depends on A (would create 2-node cycle)
+    response2 = api_client.post(
+        "/task-dependencies",
+        json={
+            "depends_on_task_id": task_b.id,
+            "dependent_task_id": task_a.id,
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response2.status_code == 400
+    assert "cycle" in response2.json()["detail"].lower()
+
+    # Verify dependency graph remains acyclic
+    map_response = api_client.get(
+        "/dependency-map",
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert map_response.status_code == 200
+    dependency_map = map_response.json()
+    assert len(dependency_map["edges"]) == 1  # Only A->B, not B->A
+
+
 def test_create_dependency_rejects_cycle(api_client, db_session):
+    """TC-DEP-02: Prevent Multi-node Cycles - Three tasks A, B, C exist."""
     owner = create_user(db_session, "owner", "owner@example.com")
     project = create_project(db_session, owner, name="CycleSafe")
 
@@ -30,6 +72,7 @@ def test_create_dependency_rejects_cycle(api_client, db_session):
     create_dependency(db_session, owner, depends_on=task_a, dependent=task_b)
     create_dependency(db_session, owner, depends_on=task_b, dependent=task_c)
 
+    # Attempt to add C depends on A (would create cycle A->B->C->A)
     response = api_client.post(
         "/task-dependencies",
         json={
@@ -40,9 +83,19 @@ def test_create_dependency_rejects_cycle(api_client, db_session):
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Dependency would create a cycle"
+    
+    # Verify existing edges unchanged
+    map_response = api_client.get(
+        "/dependency-map",
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert map_response.status_code == 200
+    dependency_map = map_response.json()
+    assert len(dependency_map["edges"]) == 2  # A->B and B->C, but not C->A
 
 
 def test_create_dependency_rejects_self_loop(api_client, db_session):
+    """TC-DEP-03: Prevent Self-loop Dependencies - A task exists."""
     owner = create_user(db_session, "loop", "loop@example.com")
     project = create_project(db_session, owner, name="SelfLoop")
     task = create_task(db_session, owner, project, title="Standalone")
@@ -60,6 +113,7 @@ def test_create_dependency_rejects_self_loop(api_client, db_session):
 
 
 def test_dependency_cross_project_forbidden(api_client, db_session):
+    """TC-DEP-05: Prevent Cross-project Dependencies - Tasks exist in different projects."""
     owner = create_user(db_session, "proj", "proj@example.com")
     project_a = create_project(db_session, owner, name="Alpha")
     project_b = create_project(db_session, owner, name="Beta")
@@ -80,6 +134,7 @@ def test_dependency_cross_project_forbidden(api_client, db_session):
 
 
 def test_task_status_transition_persists(api_client, db_session):
+    """TC-TASK-01: Task Status Transition Persists - Task exists with initial status."""
     owner = create_user(db_session, "status", "status@example.com")
     project = create_project(db_session, owner, name="Pipeline")
     task = create_task(db_session, owner, project, title="Draft spec")
@@ -103,26 +158,93 @@ def test_task_status_transition_persists(api_client, db_session):
     "/notifications",
 ])
 def test_unauthenticated_requests_return_401(api_client, path):
+    """TC-SEC-02: Unauthenticated Requests Return 401 - User is not logged in."""
     response = api_client.get(path)
     assert response.status_code == 401
 
 
-# def test_horizontal_privilege_escalation_blocked(api_client, db_session):
-#     owner = create_user(db_session, "alice", "alice@example.net")
-#     outsider = create_user(db_session, "mallory", "mallory@example.net")
-#     project = create_project(db_session, owner, name="Secrets")
-#     task = create_task(db_session, owner, project, title="Encrypt docs")
+def test_horizontal_privilege_escalation_blocked(api_client, db_session):
+    """TC-SEC-01: Horizontal Privilege Escalation Attempt - User A belongs to Project X only; Project Y exists."""
+    owner = create_user(db_session, "alice", "alice@example.net")
+    outsider = create_user(db_session, "mallory", "mallory@example.net")
+    project = create_project(db_session, owner, name="Secrets", visibility="private")
+    task = create_task(db_session, owner, project, title="Encrypt docs")
 
-#     response = api_client.patch(
-#         f"/tasks/{task.id}",
-#         json={"status": "completed"},
-#         headers=auth_headers(db_session, outsider.username),
-#     )
-#     assert response.status_code == 403
+    # Outsider attempts to read task (via comments endpoint which checks task access)
+    response = api_client.get(
+        f"/tasks/{task.id}/comments",
+        headers=auth_headers(db_session, outsider.username),
+    )
+    assert response.status_code in [403, 404]  # Forbidden or Not Found
+    
+    # Outsider attempts to update task
+    response = api_client.patch(
+        f"/tasks/{task.id}",
+        json={"status": "completed"},
+        headers=auth_headers(db_session, outsider.username),
+    )
+    assert response.status_code == 403
+    
+    # Outsider attempts to read project (via tasks endpoint which checks project access)
+    response = api_client.get(
+        f"/projects/{project.id}/tasks",
+        headers=auth_headers(db_session, outsider.username),
+    )
+    assert response.status_code in [403, 404]
+    
+    # Verify no data leakage - project should not appear in outsider's project list
+    projects_response = api_client.get(
+        "/projects",
+        headers=auth_headers(db_session, outsider.username),
+    )
+    assert projects_response.status_code == 200
+    projects = projects_response.json()
+    assert not any(p["id"] == project.id for p in projects)
+
+
+def test_block_dependency_to_nonexistent_task(api_client, db_session):
+    """TC-DEP-04: Block Dependency to Non-existent Task - A task A exists."""
+    owner = create_user(db_session, "depowner", "depowner@example.com")
+    project = create_project(db_session, owner, name="Dependency Project")
+    task_a = create_task(db_session, owner, project, title="Task A")
+    
+    # Attempt to create dependency with non-existent depends_on task
+    response = api_client.post(
+        "/task-dependencies",
+        json={
+            "depends_on_task_id": 99999,  # Non-existent task
+            "dependent_task_id": task_a.id,
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response.status_code in [404, 400]  # Not found or bad request
+    assert "not found" in response.json()["detail"].lower() or "invalid" in response.json()["detail"].lower()
+    
+    # Attempt to create dependency with non-existent dependent task
+    response = api_client.post(
+        "/task-dependencies",
+        json={
+            "depends_on_task_id": task_a.id,
+            "dependent_task_id": 99999,  # Non-existent task
+        },
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert response.status_code in [404, 400]
+    assert "not found" in response.json()["detail"].lower() or "invalid" in response.json()["detail"].lower()
+    
+    # Verify no dependency record was created
+    map_response = api_client.get(
+        "/dependency-map",
+        headers=auth_headers(db_session, owner.username),
+    )
+    assert map_response.status_code == 200
+    dependency_map = map_response.json()
+    assert len(dependency_map["edges"]) == 0
 
 
 
 def test_comment_mention_creates_notification(api_client, db_session):
+    """TC-COM-01: Comment Mention Creates Notification - Task exists; target user is a project member."""
     owner = create_user(db_session, "writer", "writer@example.com")
     guest = create_user(db_session, "reader", "reader@example.com")
     project = create_project(
@@ -151,6 +273,7 @@ def test_comment_mention_creates_notification(api_client, db_session):
 
 
 def test_comment_xss_payload_is_escaped(api_client, db_session):
+    """TC-SEC-03: Comment XSS Payload is Escaped - User attempts to inject script tags."""
     owner = create_user(db_session, "secure", "secure@example.com")
     project = create_project(db_session, owner, name="Security")
     task = create_task(db_session, owner, project, title="Review")
@@ -171,3 +294,6 @@ def test_comment_xss_payload_is_escaped(api_client, db_session):
     assert list_response.status_code == 200
     payload = list_response.json()
     assert payload[0]["content"] == html.escape(malicious)
+
+
+
