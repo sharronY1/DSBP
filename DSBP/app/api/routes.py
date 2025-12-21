@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Dict, Iterable, List, Optional, Set
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -156,13 +156,13 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
 # --- User endpoints -----------------------------------------------------------
 
 @router.get("/users/me", response_model=schemas.UserOut)
-def read_current_user(current_user: models.User = Depends(auth.get_current_user)):
+def read_current_user(current_user: models.User = Depends(auth.get_licensed_user)):
     """Return the profile for the currently authenticated user."""
     return current_user
 
 
 @router.get("/users", response_model=List[schemas.UserOut])
-def list_users(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def list_users(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_licensed_user)):
     """List all registered users, ordered alphabetically."""
     return (
         db.query(models.User)
@@ -174,7 +174,7 @@ def list_users(db: Session = Depends(get_db), current_user: models.User = Depend
 # --- Project endpoints --------------------------------------------------------
 
 @router.get("/projects", response_model=List[schemas.ProjectOut])
-def list_projects(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def list_projects(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_licensed_user)):
     """Return the projects visible to the current user."""
     projects = (
         db.query(models.Project)
@@ -190,7 +190,7 @@ def list_projects(db: Session = Depends(get_db), current_user: models.User = Dep
 def get_project_members(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Get all members who can access a project for @mentions."""
     project = ensure_project_access(project_id, db, current_user)
@@ -220,7 +220,7 @@ def get_project_members(
 def project_dashboard_summary(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Provide aggregate task counts for the dashboard donut chart."""
     project = ensure_project_access(project_id, db, current_user)
@@ -248,7 +248,7 @@ def project_dashboard_summary(
 def create_project(
     project_in: schemas.ProjectCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Create a project owned by the current user with the requested visibility."""
     # Check for duplicate project name
@@ -281,7 +281,7 @@ def update_project(
     project_id: int,
     project_update: schemas.ProjectUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Update mutable project fields and optionally its visibility scope."""
     project = (
@@ -307,7 +307,7 @@ def update_project(
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(project_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def delete_project(project_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_licensed_user)):
     """Remove a project that belongs to the current user."""
     project = db.query(models.Project).filter(models.Project.id == project_id, models.Project.owner_id == current_user.id).first()
     if not project:
@@ -322,7 +322,7 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
 def list_tasks(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """List all tasks for a project, enforcing project access control."""
     project = ensure_project_access(project_id, db, current_user)
@@ -336,7 +336,7 @@ def task_history(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Return task creation/deletion history for the authenticated user."""
     project = ensure_project_access(project_id, db, current_user)
@@ -383,7 +383,7 @@ def task_history(
 @router.get("/tasks", response_model=List[schemas.TaskOut])
 def list_all_accessible_tasks(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Return every task across projects the user is allowed to see."""
     tasks = (
@@ -401,7 +401,7 @@ def list_all_accessible_tasks(
 def create_task(
     task_in: schemas.TaskCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Create a task inside a project the user can access and set assignees."""
     project = ensure_project_access(task_in.project_id, db, current_user)
@@ -438,7 +438,7 @@ def update_task(
     task_id: int,
     task_update: schemas.TaskUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Apply partial updates to a task and optionally reset its assignees."""
     task = ensure_task_access(task_id, db, current_user)
@@ -474,7 +474,7 @@ def update_task(
 def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Remove a task after verifying the user may access it."""
     task = ensure_task_access(task_id, db, current_user)
@@ -625,7 +625,7 @@ def _creates_dependency_cycle(
 def create_task_dependency(
     dependency_in: schemas.TaskDependencyCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Create a dependency edge after validating access, uniqueness, and acyclicity."""
     dependent_task = ensure_task_access(dependency_in.dependent_task_id, db, current_user)
@@ -668,7 +668,7 @@ def create_task_dependency(
 def delete_task_dependency(
     dependency_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Delete a dependency edge if it exists and the user can access both tasks."""
     dependency = db.query(models.TaskDependency).filter(models.TaskDependency.id == dependency_id).first()
@@ -685,7 +685,7 @@ def delete_task_dependency(
 @router.get("/dependency-map", response_model=schemas.DependencyMapOut)
 def dependency_map(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Return the dependency graph focused on tasks accessible to the user."""
     tasks = (
@@ -714,7 +714,7 @@ def dependency_map(
 def list_comments(
     task_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Return the top-level comments for a task the user can access."""
     task = db.query(models.Task).filter(models.Task.id == task_id).first()
@@ -734,7 +734,7 @@ def list_comments(
 def create_comment(
     comment_in: schemas.CommentCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.get_licensed_user),
 ):
     """Create a comment (optionally threaded) and notify mentioned users."""
     task = db.query(models.Task).filter(models.Task.id == comment_in.task_id).first()
@@ -784,7 +784,7 @@ def create_comment(
 
 
 @router.post("/comments/{comment_id}/solve", response_model=schemas.CommentOut)
-def solve_comment(comment_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def solve_comment(comment_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_licensed_user)):
     """Mark a comment thread as resolved if the user has sufficient rights."""
     comment = (
         db.query(models.Comment)
@@ -816,7 +816,7 @@ def solve_comment(comment_id: int, db: Session = Depends(get_db), current_user: 
 
 
 @router.get("/notifications", response_model=List[schemas.NotificationOut])
-def list_notifications(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def list_notifications(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_licensed_user)):
     """List notifications for the current user in reverse chronological order."""
     notifications = (
         db.query(models.Notification)
@@ -828,7 +828,7 @@ def list_notifications(db: Session = Depends(get_db), current_user: models.User 
 
 
 @router.post("/notifications/{notification_id}/read", response_model=schemas.NotificationOut)
-def mark_notification_read(notification_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def mark_notification_read(notification_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_licensed_user)):
     """Mark an individual notification as read."""
     notification = (
         db.query(models.Notification)
@@ -862,3 +862,110 @@ def serve_login():
 def serve_register():
     """Serve the standalone registration HTML page."""
     return FileResponse(FRONTEND_PUBLIC_DIR / "register.html")
+
+
+@router.get("/license", include_in_schema=False)
+def serve_license():
+    """Serve the license activation HTML page."""
+    return FileResponse(FRONTEND_PUBLIC_DIR / "license.html")
+
+
+# --- License endpoints -------------------------------------------------
+
+@router.post("/licenses/activate", response_model=schemas.LicenseOut, status_code=status.HTTP_201_CREATED)
+def activate_license(
+    license_data: schemas.LicenseActivate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Activate a license key for the current user"""
+    from app.services import license as license_service
+    
+    try:
+        user_license = license_service.activate_license_for_user(
+            current_user.id,
+            license_data.license_key,
+            db
+        )
+        db.refresh(user_license)
+        return schemas.LicenseOut(
+            id=user_license.id,
+            license_key=user_license.license.license_key,
+            activated_at=user_license.activated_at
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/licenses/upload", response_model=List[schemas.LicenseOut], status_code=status.HTTP_201_CREATED)
+async def upload_license_file(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Upload license file (one key per line), activate the first valid key"""
+    from app.services import license as license_service
+    
+    content = await file.read()
+    file_content = content.decode('utf-8')
+    
+    license_keys = license_service.parse_license_file(file_content)
+    
+    if not license_keys:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid license keys found in file"
+        )
+    
+    # Try to activate the first valid key
+    activated_licenses = []
+    for key in license_keys:
+        try:
+            user_license = license_service.activate_license_for_user(
+                current_user.id,
+                key,
+                db
+            )
+            db.refresh(user_license)
+            activated_licenses.append(schemas.LicenseOut(
+                id=user_license.id,
+                license_key=user_license.license.license_key,
+                activated_at=user_license.activated_at
+            ))
+            break  # Only activate the first one
+        except ValueError:
+            continue  # Try next key
+    
+    if not activated_licenses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No available license keys found in file"
+        )
+    
+    return activated_licenses
+
+
+@router.get("/licenses/status", response_model=schemas.LicenseStatus)
+def get_license_status(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Get the current user's license status"""
+    from app.services import license as license_service
+    
+    has_license = license_service.check_user_has_license(current_user)
+    
+    if has_license and current_user.license:
+        return schemas.LicenseStatus(
+            has_license=True,
+            license_key=current_user.license.license.license_key,
+            activated_at=current_user.license.activated_at
+        )
+    
+    return schemas.LicenseStatus(
+        has_license=False,
+        license_key=None,
+        activated_at=None
+    )

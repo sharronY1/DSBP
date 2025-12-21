@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Activate License · Digital Software Building System</title>
+    <link rel="stylesheet" href="/static/src/assets/styles/auth.css" />
+  </head>
+  <body class="auth-body">
+    <main class="auth-shell">
+      <section class="auth-card">
+        <div class="auth-header">
+          <div class="logo">K</div>
+          <div>
+            <h1>Activate License</h1>
+            <p>Enter your license key to access the system.</p>
+          </div>
+        </div>
+        <p id="license-error" class="auth-error hidden"></p>
+        <form id="license-form" class="stacked">
+          <label for="license-key">License Key</label>
+          <input 
+            type="text" 
+            id="license-key" 
+            name="license_key" 
+            placeholder="AAAA-BBBB-CCCC-DDDD" 
+            required 
+            pattern="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"
+            style="text-transform: uppercase;"
+          />
+          <button type="submit" class="primary-button">Activate License</button>
+        </form>
+        <div style="margin: 20px 0; text-align: center; color: #666;">
+          <p>OR</p>
+        </div>
+        <form id="license-file-form" class="stacked">
+          <label for="license-file">Upload License File</label>
+          <input type="file" id="license-file" name="license_file" accept=".txt,.lic" />
+          <button type="submit" class="primary-button">Upload and Activate</button>
+        </form>
+        <p class="auth-meta">
+          <a href="/" class="accent-link">Back to Dashboard</a>
+        </p>
+      </section>
+    </main>
+    <script src="/static/src/pages/license.js"></script>
+  </body>
+</html>
+

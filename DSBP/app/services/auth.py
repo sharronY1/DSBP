@@ -51,3 +51,18 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     if user is None:
         raise credentials_exception
     return user
+
+
+def get_licensed_user(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> models.User:
+    """Ensure user has both valid authentication and a valid license"""
+    from app.services import license as license_service
+    
+    if not license_service.check_user_has_license(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Valid license required. Please activate a license key to use this system."
+        )
+    return current_user

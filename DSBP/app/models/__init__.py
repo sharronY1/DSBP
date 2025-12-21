@@ -57,6 +57,7 @@ class User(Base):
         back_populates="assignees",
     )
     task_activities = relationship("TaskActivity", back_populates="user", cascade="all, delete-orphan")
+    license = relationship("UserLicense", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
 class Project(Base):
@@ -197,3 +198,27 @@ class TaskActivity(Base):
     user = relationship("User", back_populates="task_activities")
     project = relationship("Project", back_populates="task_activities")
     task = relationship("Task")
+
+
+class License(Base):
+    __tablename__ = "licenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    license_key = Column(String(50), unique=True, nullable=False, index=True)  # AAAA-BBBB-CCCC-DDDD
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)  # Whether the license is available (not used)
+
+    # Relationship to user licenses
+    user_licenses = relationship("UserLicense", back_populates="license", cascade="all, delete-orphan")
+
+
+class UserLicense(Base):
+    __tablename__ = "user_licenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    license_id = Column(Integer, ForeignKey("licenses.id", ondelete="CASCADE"), nullable=False)
+    activated_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="license")
+    license = relationship("License", back_populates="user_licenses")

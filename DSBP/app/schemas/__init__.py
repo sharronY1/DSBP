@@ -194,3 +194,21 @@ class ProjectDashboardOut(BaseModel):
 class TaskHistoryResponse(BaseModel):
     activities: List[TaskActivityOut]
     daily_counts: Dict[str, int]
+
+
+class LicenseActivate(BaseModel):
+    license_key: str = Field(..., description="License key in format AAAA-BBBB-CCCC-DDDD")
+
+
+class LicenseOut(BaseModel):
+    id: int
+    license_key: str
+    activated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LicenseStatus(BaseModel):
+    has_license: bool
+    license_key: Optional[str] = None
+    activated_at: Optional[datetime] = None
