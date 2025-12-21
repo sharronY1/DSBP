@@ -127,7 +127,7 @@ def log_task_activity(
 
 @router.post("/auth/register", response_model=schemas.UserOut, status_code=status.HTTP_201_CREATED)
 def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
-    """Create a new user after confirming username and email uniqueness."""
+    """Create a new user after confirming username and email uniqueness. Automatically generates a unique permanent license."""
     if db.query(models.User).filter(models.User.username == user_in.username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
     if db.query(models.User).filter(models.User.email == user_in.email).first():
@@ -138,6 +138,40 @@ def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
         hashed_password=auth.get_password_hash(user_in.password),
     )
     db.add(user)
+    db.flush()  # Flush to get user.id
+    
+    # Automatically generate a unique permanent license for the user
+    from app.services import license as license_service
+    
+    max_attempts = 100
+    license_key = None
+    for attempt in range(max_attempts):
+        key = license_service.generate_license_key()
+        # Check if license key already exists
+        existing = db.query(models.License).filter(models.License.license_key == key).first()
+        if not existing:
+            license_key = key
+            break
+    
+    if not license_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate unique license key"
+        )
+    
+    # Create license
+    license = models.License(license_key=license_key, is_active=True)
+    db.add(license)
+    db.flush()
+    
+    # Create user-license association
+    user_license = models.UserLicense(
+        user_id=user.id,
+        license_id=license.id
+    )
+    license.is_active = False  # Mark as used
+    db.add(user_license)
+    
     db.commit()
     db.refresh(user)
     return user
@@ -864,89 +898,7 @@ def serve_register():
     return FileResponse(FRONTEND_PUBLIC_DIR / "register.html")
 
 
-@router.get("/license", include_in_schema=False)
-def serve_license():
-    """Serve the license activation HTML page."""
-    return FileResponse(FRONTEND_PUBLIC_DIR / "license.html")
-
-
 # --- License endpoints -------------------------------------------------
-
-@router.post("/licenses/activate", response_model=schemas.LicenseOut, status_code=status.HTTP_201_CREATED)
-def activate_license(
-    license_data: schemas.LicenseActivate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    """Activate a license key for the current user"""
-    from app.services import license as license_service
-    
-    try:
-        user_license = license_service.activate_license_for_user(
-            current_user.id,
-            license_data.license_key,
-            db
-        )
-        db.refresh(user_license)
-        return schemas.LicenseOut(
-            id=user_license.id,
-            license_key=user_license.license.license_key,
-            activated_at=user_license.activated_at
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
-
-@router.post("/licenses/upload", response_model=List[schemas.LicenseOut], status_code=status.HTTP_201_CREATED)
-async def upload_license_file(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    """Upload license file (one key per line), activate the first valid key"""
-    from app.services import license as license_service
-    
-    content = await file.read()
-    file_content = content.decode('utf-8')
-    
-    license_keys = license_service.parse_license_file(file_content)
-    
-    if not license_keys:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid license keys found in file"
-        )
-    
-    # Try to activate the first valid key
-    activated_licenses = []
-    for key in license_keys:
-        try:
-            user_license = license_service.activate_license_for_user(
-                current_user.id,
-                key,
-                db
-            )
-            db.refresh(user_license)
-            activated_licenses.append(schemas.LicenseOut(
-                id=user_license.id,
-                license_key=user_license.license.license_key,
-                activated_at=user_license.activated_at
-            ))
-            break  # Only activate the first one
-        except ValueError:
-            continue  # Try next key
-    
-    if not activated_licenses:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No available license keys found in file"
-        )
-    
-    return activated_licenses
-
 
 @router.get("/licenses/status", response_model=schemas.LicenseStatus)
 def get_license_status(

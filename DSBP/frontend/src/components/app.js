@@ -1604,24 +1604,6 @@ async function initializeApp() {
 
   try {
     currentUser = await apiRequest("/users/me");
-    
-    // Check license status
-    try {
-      const licenseStatus = await apiRequest("/licenses/status");
-      if (!licenseStatus.has_license) {
-        // No license, redirect to activation page
-        window.location.href = "/license";
-        return;
-      }
-    } catch (error) {
-      // If license status check fails (may be 403), also redirect to activation page
-      if (error.message.includes("Valid license required") || error.message.includes("403")) {
-        window.location.href = "/license";
-        return;
-      }
-      // Continue processing other errors
-    }
-    
     allUsers = await apiRequest("/users");
 
     if (currentUsernameEl) {
@@ -1633,6 +1615,8 @@ async function initializeApp() {
         currentUserIcon.className = `user-icon color-${currentUser.id % 8}`;
     }
 
+    // Load license information
+    await loadLicenseInfo();
 
     await loadProjects();
 
@@ -1650,11 +1634,6 @@ async function initializeApp() {
     }
   } catch (error) {
     console.error("Failed to initialize app:", error);
-    if (error.message && (error.message.includes("Valid license required") || error.message.includes("403"))) {
-      // License-related error, redirect to activation page
-      window.location.href = "/license";
-      return;
-    }
     if (error.message.includes("Session expired")) {
         alert(error.message);
     }
@@ -2860,9 +2839,155 @@ function getTimeAgo(date) {
   return "just now";
 }
 
+// License management
+let licenseKey = null;
+let isLicenseVisible = false;
+
+async function loadLicenseInfo() {
+  try {
+    const licenseStatus = await apiRequest("/licenses/status");
+    if (licenseStatus.has_license && licenseStatus.license_key) {
+      licenseKey = licenseStatus.license_key;
+      updateLicenseDisplay();
+    }
+  } catch (error) {
+    console.error("Failed to load license info:", error);
+  }
+}
+
+function updateLicenseDisplay() {
+  const licenseKeyText = document.getElementById("license-key-text");
+  const toggleBtn = document.getElementById("license-toggle-visibility");
+  if (licenseKeyText && licenseKey) {
+    if (isLicenseVisible) {
+      licenseKeyText.textContent = licenseKey;
+      licenseKeyText.classList.remove("license-key-hidden");
+      // Change icon to "eye-off" when visible
+      if (toggleBtn) {
+        toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+          <line x1="1" y1="1" x2="23" y2="23"></line>
+        </svg>`;
+      }
+    } else {
+      licenseKeyText.textContent = "••••-••••-••••-••••";
+      licenseKeyText.classList.add("license-key-hidden");
+      // Change icon to "eye" when hidden
+      if (toggleBtn) {
+        toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>`;
+      }
+    }
+  }
+}
+
+function setupLicensePopup() {
+  const userBadgeContainer = document.getElementById("user-badge-container");
+  const licensePopup = document.getElementById("license-popup");
+  const toggleBtn = document.getElementById("license-toggle-visibility");
+
+  if (!userBadgeContainer || !licensePopup) return;
+
+  let hideTimeout = null;
+  let isMouseInPopup = false;
+  let isMouseInBadge = false;
+
+  function showPopup() {
+    // Clear any pending hide timeout
+    if (hideTimeout) {
+      clearTimeout(hideTimeout);
+      hideTimeout = null;
+    }
+    
+    // Only reset license visibility if popup was hidden (not already visible)
+    const wasHidden = licensePopup.classList.contains("hidden");
+    if (wasHidden) {
+      // Reset license visibility to hidden when showing popup for the first time
+      isLicenseVisible = false;
+      updateLicenseDisplay();
+    }
+    
+    if (licenseKey) {
+      licensePopup.classList.remove("hidden");
+    }
+  }
+
+  function hidePopup() {
+    // Only hide if mouse is not in either element
+    if (!isMouseInBadge && !isMouseInPopup) {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+      }
+      hideTimeout = setTimeout(() => {
+        // Double check before hiding
+        if (!isMouseInBadge && !isMouseInPopup) {
+          licensePopup.classList.add("hidden");
+          // Reset license visibility when hiding
+          isLicenseVisible = false;
+          updateLicenseDisplay();
+        }
+      }, 150);
+    }
+  }
+
+  // Show popup on hover over user badge
+  userBadgeContainer.addEventListener("mouseenter", (e) => {
+    isMouseInBadge = true;
+    showPopup();
+  });
+  
+  // Keep popup visible when mouse enters popup
+  licensePopup.addEventListener("mouseenter", (e) => {
+    isMouseInPopup = true;
+    if (hideTimeout) {
+      clearTimeout(hideTimeout);
+      hideTimeout = null;
+    }
+  });
+
+  // Hide popup when mouse leaves user badge
+  userBadgeContainer.addEventListener("mouseleave", (e) => {
+    isMouseInBadge = false;
+    // Check if mouse is moving to popup
+    const relatedTarget = e.relatedTarget;
+    if (!relatedTarget || !licensePopup.contains(relatedTarget)) {
+      hidePopup();
+    }
+  });
+  
+  // Hide popup when mouse leaves popup
+  licensePopup.addEventListener("mouseleave", (e) => {
+    isMouseInPopup = false;
+    // Check if mouse is moving to badge
+    const relatedTarget = e.relatedTarget;
+    if (!relatedTarget || !userBadgeContainer.contains(relatedTarget)) {
+      hidePopup();
+    }
+  });
+
+  // Toggle license key visibility
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      isLicenseVisible = !isLicenseVisible;
+      updateLicenseDisplay();
+    });
+  }
+}
+
 // Event Listeners
 if (logoutBtn) {
   logoutBtn.addEventListener("click", logoutUser);
+}
+
+// Setup license popup after DOM is ready
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", setupLicensePopup);
+} else {
+  setupLicensePopup();
 }
 
 if (btnAddProject) {

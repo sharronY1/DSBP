@@ -15,9 +15,24 @@
           <div class="logo-icon">D</div>
           <span class="logo-text">DSBP</span>
         </div>
-        <div class="user-badge">
+        <div class="user-badge" id="user-badge-container">
           <span class="user-icon" id="current-user-icon">?</span> 
           <span id="current-username" class="user-name">Loading...</span>
+          <div id="license-popup" class="license-popup hidden">
+            <div class="license-popup-header">License Key</div>
+            <div class="license-popup-content">
+              <div class="license-key-display">
+                <span id="license-key-text" class="license-key-hidden">••••-••••-••••-••••</span>
+                <button id="license-toggle-visibility" class="license-toggle-btn" aria-label="Toggle license key visibility">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                </button>
+              </div>
+              <div class="license-type-badge">permanent</div>
+            </div>
+          </div>
         </div>
       </div>
       <button id="logout-btn" class="btn-logout">Logout</button>

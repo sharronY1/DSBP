@@ -76,6 +76,8 @@ body {
   background: #334155;
   padding: 6px 12px;
   border-radius: 20px;
+  position: relative;
+  cursor: pointer;
 }
 
 .user-icon {
@@ -93,6 +95,108 @@ body {
 
 .user-name {
   font-size: 14px;
+}
+
+/* License popup styles */
+.license-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  background: #475569;
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 280px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-in;
+  pointer-events: auto;
+}
+
+.license-popup.hidden {
+  display: none;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.license-popup-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 12px;
+}
+
+.license-popup-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.license-key-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1e293b;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.license-key-display .license-toggle-btn {
+  flex-shrink: 0;
+}
+
+#license-key-text {
+  flex: 1;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: white;
+  letter-spacing: 1px;
+}
+
+.license-key-hidden {
+  color: #64748b !important;
+}
+
+.license-toggle-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+  width: 20px;
+  height: 20px;
+}
+
+.license-toggle-btn:hover {
+  color: white;
+}
+
+.license-toggle-btn svg {
+  display: block;
+}
+
+.license-type-badge {
+  display: inline-block;
+  background: #334155;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  align-self: flex-start;
 }
 
 .btn-logout {
