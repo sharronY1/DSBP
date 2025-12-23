@@ -1456,10 +1456,10 @@ let dependencyDataLoaded = false;
 let notifications = [];
 let notificationsLoaded = false;
 let dashboardMetrics = null;
-// Initialize historyMonthCursor to current month's first day
+// Initialize historyMonthCursor to current month's first day (in Hong Kong timezone)
 let historyMonthCursor = (() => {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1);
+  const nowParts = getHongKongDateParts(new Date());
+  return new Date(parseInt(nowParts.year), parseInt(nowParts.month) - 1, 1);
 })();
 let historyActivitiesByDay = {};
 let historyDailyCounts = {};
@@ -1855,10 +1855,9 @@ function drawStatusDonutChart(counts = {}) {
 }
 
 function formatDateKey(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  // Convert to Hong Kong timezone for date components
+  const parts = getHongKongDateParts(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function formatFullDateLabel(dateKey) {
@@ -1869,6 +1868,7 @@ function formatFullDateLabel(dateKey) {
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: 'Asia/Hong_Kong'
   });
 }
 
@@ -1885,7 +1885,12 @@ function formatTimeLabel(isoString) {
     return "--:--";
   }
 
-  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return date.toLocaleTimeString("en-US", { 
+    hour: "2-digit", 
+    minute: "2-digit", 
+    hour12: false,
+    timeZone: 'Asia/Hong_Kong'
+  });
 }
 
 function describeActivity(activity) {
@@ -1905,8 +1910,8 @@ function describeActivity(activity) {
 function getFirstHistoryDateKey() {
   const keys = Object.keys(historyActivitiesByDay);
   if (keys.length === 0) {
-    // Return current date instead of first day of month
-    return formatDateKey(new Date());
+    // Return current date instead of first day of month (in Hong Kong timezone)
+    return formatDateKey(getHongKongToday());
   }
   return keys.sort().pop();
 }
@@ -1919,8 +1924,8 @@ function renderHistoryCalendar() {
   const daysInMonth = new Date(historyMonthCursor.getFullYear(), historyMonthCursor.getMonth() + 1, 0).getDate();
   const startWeekday = firstDay.getDay();
   
-  // Get today's date key for comparison
-  const today = new Date();
+  // Get today's date key for comparison (in Hong Kong timezone)
+  const today = getHongKongToday();
   const todayKey = formatDateKey(today);
 
   for (let i = 0; i < startWeekday; i += 1) {
@@ -1960,6 +1965,7 @@ function renderHistoryCalendar() {
   historyMonthLabel.textContent = historyMonthCursor.toLocaleDateString("en-US", {
     month: "long",
     year: "numeric",
+    timeZone: 'Asia/Hong_Kong'
   });
 }
 
@@ -2016,8 +2022,8 @@ async function loadHistoryForMonth(projectId) {
       historyActivitiesByDay[key].push(activity);
     });
     if (!selectedHistoryDate || !historyActivitiesByDay[selectedHistoryDate]) {
-      // Default to current date instead of first day of month
-      const today = new Date();
+      // Default to current date instead of first day of month (in Hong Kong timezone)
+      const today = getHongKongToday();
       const todayKey = formatDateKey(today);
       selectedHistoryDate = Object.keys(historyActivitiesByDay).length > 0 ? getFirstHistoryDateKey() : todayKey;
     }
@@ -2045,11 +2051,12 @@ async function selectProject(projectId) {
   await loadTasks(projectId);
   renderDashboardProjectInfo();
   populateProjectSettingsForm();
-  // Reset historyMonthCursor to current month's first day (for calendar display)
-  const now = new Date();
-  historyMonthCursor = new Date(now.getFullYear(), now.getMonth(), 1);
-  // Set selectedHistoryDate to current date instead of null
-  selectedHistoryDate = formatDateKey(now);
+  // Reset historyMonthCursor to current month's first day (for calendar display, in Hong Kong timezone)
+  const nowHK = getHongKongToday();
+  const nowParts = getHongKongDateParts(new Date());
+  historyMonthCursor = new Date(parseInt(nowParts.year), parseInt(nowParts.month) - 1, 1);
+  // Set selectedHistoryDate to current date instead of null (in Hong Kong timezone)
+  selectedHistoryDate = formatDateKey(nowHK);
   historyActivitiesByDay = {};
   historyDailyCounts = {};
   renderHistoryCalendar();
@@ -2798,27 +2805,35 @@ function getInitials(name) {
 
 function formatDate(date) {
   const d = new Date(date);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const today = getHongKongToday();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
   
-  // Clear time part of d for accurate date comparison
-  d.setHours(0, 0, 0, 0);
+  // Get Hong Kong date components for d
+  const dParts = getHongKongDateParts(d);
+  const dHK = new Date(parseInt(dParts.year), parseInt(dParts.month) - 1, parseInt(dParts.day));
+  
+  // Clear time part for accurate date comparison
+  dHK.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  tomorrow.setHours(0, 0, 0, 0);
+  yesterday.setHours(0, 0, 0, 0);
 
-  if (d.getTime() === today.getTime()) return "Today";
-  if (d.getTime() === tomorrow.getTime()) return "Tomorrow";
-  if (d.getTime() === yesterday.getTime()) return "Yesterday";
+  if (dHK.getTime() === today.getTime()) return "Today";
+  if (dHK.getTime() === tomorrow.getTime()) return "Tomorrow";
+  if (dHK.getTime() === yesterday.getTime()) return "Yesterday";
   
-  const diff = d - today;
+  const diff = dHK - today;
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
 
-  if (days > 1 && days < 7) return d.toLocaleDateString("en-US", { weekday: 'long' });
+  if (days > 1 && days < 7) return d.toLocaleDateString("en-US", { weekday: 'long', timeZone: 'Asia/Hong_Kong' });
   if (days > 0) return `in ${days} days`;
   if (days < -1) return `${Math.abs(days)} days ago`;
 
   // Default for past dates or far future
-  return d.toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Hong_Kong' });
 }
 
 function getTimeAgo(date) {
@@ -2842,16 +2857,13 @@ function getTimeAgo(date) {
   return "just now";
 }
 
-// Format absolute datetime for display in Hong Kong timezone (UTC+8)
-function formatAbsoluteDateTime(dateString) {
-  if (!dateString) return "--";
-  
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) {
-    return "--";
+// Get date components in Hong Kong timezone
+function getHongKongDateParts(date) {
+  // Ensure date is a Date object
+  if (!(date instanceof Date)) {
+    date = new Date(date);
   }
   
-  // Convert to Hong Kong timezone (Asia/Hong_Kong)
   const options = {
     timeZone: 'Asia/Hong_Kong',
     year: 'numeric',
@@ -2862,9 +2874,58 @@ function formatAbsoluteDateTime(dateString) {
     hour12: false
   };
   
-  const formatter = new Intl.DateTimeFormat('zh-CN', options);
+  // Use 'en-US' locale to ensure consistent formatting
+  const formatter = new Intl.DateTimeFormat('en-US', options);
   const parts = formatter.formatToParts(date);
   
+  const dateParts = {};
+  parts.forEach(part => {
+    dateParts[part.type] = part.value;
+  });
+  
+  return dateParts;
+}
+
+// Get current date in Hong Kong timezone (date only, no time)
+function getHongKongToday() {
+  const now = new Date();
+  const parts = getHongKongDateParts(now);
+  return new Date(parseInt(parts.year), parseInt(parts.month) - 1, parseInt(parts.day));
+}
+
+// Format absolute datetime for display in Hong Kong timezone (UTC+8)
+function formatAbsoluteDateTime(dateString) {
+  if (!dateString) return "--";
+  
+  // Parse the date string - ensure UTC time is properly handled
+  let date;
+  if (typeof dateString === 'string') {
+    // If the string doesn't have timezone info, assume it's UTC
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(dateString)) {
+      date = new Date(dateString + 'Z');
+    } else {
+      date = new Date(dateString);
+    }
+  } else {
+    date = new Date(dateString);
+  }
+  
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+  
+  // Use Intl.DateTimeFormat with explicit timeZone to ensure Hong Kong timezone
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  
+  const parts = formatter.formatToParts(date);
   const dateParts = {};
   parts.forEach(part => {
     dateParts[part.type] = part.value;
@@ -3545,7 +3606,8 @@ function formatDate(dateString) {
   return date.toLocaleDateString("en-US", { 
     year: "numeric", 
     month: "short", 
-    day: "numeric" 
+    day: "numeric",
+    timeZone: 'Asia/Hong_Kong'
   });
 }
 
@@ -3849,11 +3911,13 @@ function renderNotifications() {
       ? `<div class="notification-location">${locationParts.join('<span class="notification-arrow"> → </span>')}</div>`
       : "";
 
+    const absoluteTime = formatAbsoluteDateTime(notification.created_at);
+    
     item.innerHTML = `
       <div class="notification-content">
         <p class="notification-message">${escapeHtml(notification.message)}</p>
         ${locationHtml}
-        <span class="notification-time">${new Date(notification.created_at).toLocaleString("en-US")}</span>
+        <span class="notification-time">${absoluteTime}</span>
       </div>
     `;
 
